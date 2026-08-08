@@ -37,11 +37,11 @@ def initialize_database():
             session.add(admin)
             session.commit()
 
-            print("✓ Default administrator created.")
+            print("[OK] Default administrator created.")
 
         else:
 
-            print("✓ Administrator already exists.")
+            print("[OK] Administrator already exists.")
 
     finally:
 

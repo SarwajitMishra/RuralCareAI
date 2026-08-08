@@ -104,6 +104,11 @@ class Consultation(Base):
         nullable=True,
     )
 
+    ai_summary = Column(
+        Text,
+        nullable=True,
+    )
+
     doctor_notes = Column(
         Text,
         nullable=True,
