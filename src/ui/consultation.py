@@ -1,0 +1,851 @@
+"""
+Consultation UI
+
+AI-Based Rural Healthcare Triage Assistant
+
+Allows the healthcare worker to:
+
+1. Select a patient
+2. Select symptoms
+3. Predict disease
+4. View AI triage
+5. Save consultation
+"""
+
+import streamlit as st
+import pandas as pd
+from pathlib import Path
+
+from src.utils.pdf_generator import PDFGenerator
+
+from src.services.patient_service import PatientService
+from src.services.consultation_service import ConsultationService
+from src.nlp.symptom_extractor import SymptomExtractor
+from src.ml.symptom_service import SymptomService
+
+
+from src.image.image_service import ImageService
+from src.voice.voice_service import VoiceService
+import tempfile
+
+from src.ml.predictor import DiseasePredictor
+from src.image.image_predictor import ImagePredictor
+
+# ---------------------------------------------------------
+# Services
+# ---------------------------------------------------------
+
+patient_service = PatientService()
+consultation_service = ConsultationService()
+symptom_service = SymptomService()
+symptom_extractor = SymptomExtractor()
+from src.ml.fusion_engine import FusionEngine
+image_service = ImageService()
+voice_service = VoiceService()
+fusion_engine = FusionEngine()
+# ---------------------------------------------------------
+# ML Models
+# ---------------------------------------------------------
+
+disease_predictor = DiseasePredictor()
+image_predictor = ImagePredictor()
+
+
+# ---------------------------------------------------------
+# Session State
+# ---------------------------------------------------------
+
+DEFAULTS = {
+
+    "consultation_prediction": None,
+
+    "selected_patient_id": None,
+
+    "selected_symptoms": [],
+
+    "doctor_notes": "",
+
+"medical_history": [],
+
+"other_history": "",
+}
+
+for key, value in DEFAULTS.items():
+
+    if key not in st.session_state:
+
+        st.session_state[key] = value
+
+
+
+# ---------------------------------------------------------
+# Main Screen
+# ---------------------------------------------------------
+
+def show_consultation():
+
+    st.title("🩺 AI Consultation")
+
+    st.caption(
+        "AI-Based Rural Healthcare Triage Assistant"
+    )
+
+    patients = patient_service.get_all_patients()
+
+    if not patients:
+
+        st.warning(
+            "No patients registered."
+        )
+
+        st.info(
+            "Please register a patient first."
+        )
+
+        return
+
+    st.divider()
+
+    # -------------------------------------------------
+    # Patient Selection
+    # -------------------------------------------------
+
+    st.subheader("👤 Select Patient")
+
+    patient_options = {
+
+        f"{patient.patient_code} - {patient.full_name}":
+            patient.id
+
+        for patient in patients
+
+    }
+
+    selected_label = st.selectbox(
+
+        "Patient",
+
+        list(patient_options.keys()),
+
+    )
+
+    patient_id = patient_options[selected_label]
+
+    st.session_state.selected_patient_id = patient_id
+
+    patient = patient_service.get_patient(patient_id)
+
+    st.divider()
+
+    # -------------------------------------------------
+    # Patient Information
+    # -------------------------------------------------
+
+    st.subheader("📋 Patient Details")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.text_input(
+
+            "Patient ID",
+
+            patient.patient_code,
+
+            disabled=True,
+
+        )
+
+        st.text_input(
+
+            "Full Name",
+
+            patient.full_name,
+
+            disabled=True,
+
+        )
+
+        st.text_input(
+
+            "Gender",
+
+            patient.gender,
+
+            disabled=True,
+
+        )
+
+        st.text_input(
+
+            "Blood Group",
+
+            patient.blood_group or "",
+
+            disabled=True,
+
+        )
+
+        st.text_input(
+
+            "Mobile",
+
+            patient.mobile_number or "",
+
+            disabled=True,
+
+        )
+
+    with col2:
+
+        st.text_input(
+
+            "Age",
+
+            str(patient.age),
+
+            disabled=True,
+
+        )
+
+        st.text_input(
+
+            "Village",
+
+            patient.village or "",
+
+            disabled=True,
+
+        )
+
+        st.text_input(
+
+            "District",
+
+            patient.district or "",
+
+            disabled=True,
+
+        )
+
+        st.text_input(
+
+            "State",
+
+            patient.state or "",
+
+            disabled=True,
+
+        )
+
+        st.text_input(
+
+            "Weight (kg)",
+
+            str(patient.weight_kg or ""),
+
+            disabled=True,
+
+        )
+
+    st.divider()
+
+    # -------------------------------------------------
+    # Past Medical History
+    # -------------------------------------------------
+
+    st.subheader("📋 Existing Medical Conditions")
+
+    history_options = [
+
+        "Diabetes",
+        "Hypertension",
+        "Thyroid Disorder",
+        "Asthma",
+        "Heart Disease",
+        "Kidney Disease",
+        "Liver Disease",
+        "Tuberculosis",
+        "Cancer"
+
+    ]
+
+    medical_history = st.multiselect(
+
+        "Known Chronic Conditions",
+
+        history_options,
+
+    )
+
+    other_history = st.text_input(
+
+        "Other Medical History (Optional)",
+
+        placeholder="Example: Epilepsy, COPD, Previous Stroke"
+
+    )
+
+    st.session_state.medical_history = medical_history
+
+    st.session_state.other_history = other_history
+    # -------------------------------------------------
+    # NLP Symptom Extraction
+    # -------------------------------------------------
+
+    st.subheader("🤒 Describe Symptoms")
+
+    user_input = st.text_area(
+
+        "Describe the patient's symptoms",
+
+        height=120,
+
+        placeholder="""
+    Examples:
+
+    • I have fever and cough for 3 days
+
+    • Bukhar hai aur ulti ho rahi hai
+
+    • Repeated fever, loose motion and stomach infection
+
+    • Chest pain with breathing difficulty
+    """
+
+    )
+    # -------------------------------------------------
+    # Voice Input
+    # -------------------------------------------------
+
+    st.subheader("🎤 Voice Input (Optional)")
+
+    voice_file = st.file_uploader(
+
+        "Upload Voice Recording",
+
+        type=["wav", "mp3", "m4a"]
+
+    )
+
+    if voice_file:
+        with tempfile.NamedTemporaryFile(
+
+                delete=False,
+
+                suffix=".wav"
+
+        ) as tmp:
+            tmp.write(voice_file.read())
+
+            audio_path = tmp.name
+
+        with st.spinner("Transcribing voice..."):
+            voice_result = voice_service.transcribe(audio_path)
+
+        st.success("✅ Voice successfully transcribed")
+
+        st.text_area(
+
+            "Transcript",
+
+            value=voice_result["transcript"],
+
+            height=120,
+
+            disabled=True,
+
+        )
+
+        # Replace typed text with transcript
+
+        user_input = voice_result["transcript"]
+
+    st.write("")
+
+    selected_symptoms = st.multiselect(
+
+        "AI Extracted Symptoms (Editable)",
+
+        symptom_service.get_machine_symptoms(),
+
+        default=st.session_state.selected_symptoms,
+
+        format_func=lambda x: x.replace("_", " ").title()
+
+    )
+
+    st.session_state.selected_symptoms = selected_symptoms
+
+    st.divider()
+
+    st.subheader("📷 Skin Lesion Image (Optional)")
+
+    uploaded_image = st.file_uploader(
+        "Upload Skin Lesion",
+        type=["jpg", "jpeg", "png"],
+    )
+
+    image_prediction = None
+
+    if uploaded_image:
+
+        st.image(
+            uploaded_image,
+            caption="Uploaded Image",
+            width=300,
+        )
+
+        with st.spinner("Analyzing image..."):
+
+            try:
+
+                image_prediction = image_service.predict(uploaded_image)
+
+                st.success(
+                    f"Image Prediction: {image_prediction['prediction']}"
+                )
+
+                st.metric(
+                    "Image Confidence",
+                    f"{image_prediction['confidence'] * 100:.2f}%"
+                )
+
+            except Exception as ex:
+
+                st.error(str(ex))
+
+    st.write("")
+
+    predict = st.button(
+
+        "🧠 Predict Disease",
+
+        type="primary",
+
+        use_container_width=True,
+
+    )
+
+    if predict:
+
+        # ---------------------------------------------
+        # Automatic NLP Extraction
+        # ---------------------------------------------
+
+        result = symptom_extractor.extract(user_input)
+
+        st.session_state.selected_symptoms = result[
+            "detected_symptoms"
+        ]
+
+        st.session_state.nlp_result = result
+
+        selected_symptoms = st.session_state.selected_symptoms
+
+        if len(selected_symptoms) == 0:
+
+            st.error(
+                "Please select at least one symptom."
+            )
+
+            return
+
+        machine_symptoms = selected_symptoms
+
+        prediction = consultation_service.predict(
+            machine_symptoms
+        )
+
+        fusion_result = fusion_engine.fuse(
+            prediction,
+            image_prediction
+        )
+
+        st.session_state.consultation_prediction = prediction
+
+        # -------------------------------------------------
+        # AI Prediction Result
+        # -------------------------------------------------
+
+        prediction = st.session_state.consultation_prediction
+
+        if prediction is not None:
+
+            st.divider()
+
+            st.subheader("🧠 AI Triage Result")
+
+            confidence = prediction["confidence"]
+            risk = prediction["risk_level"]
+
+            if risk == "Critical":
+                risk_color = "🔴"
+            elif risk == "High":
+                risk_color = "🟠"
+            elif risk == "Medium":
+                risk_color = "🟡"
+            else:
+                risk_color = "🟢"
+
+            metric1, metric2, metric3 = st.columns(3)
+
+            with metric1:
+
+                st.metric(
+                    "Predicted Disease",
+                    fusion_result["final_prediction"],
+                )
+
+            with metric2:
+
+                st.metric(
+                    "Confidence",
+                    f"{confidence:.2f} %",
+                )
+
+            with metric3:
+
+                st.metric(
+                    "Risk Level",
+                    f"{risk_color} {risk}",
+                )
+
+            st.success(
+                prediction["recommendation"]
+            )
+
+            st.subheader("🧠 Why did the AI predict this?")
+
+            explanation = disease_predictor.explain_prediction(
+                st.session_state.selected_symptoms
+            )
+
+            if explanation:
+                explanation_df = pd.DataFrame(explanation)
+
+                explanation_df["Importance"] = (
+                        explanation_df["Importance"] * 100
+                ).round(2)
+
+                st.dataframe(
+                    explanation_df,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.bar_chart(
+                    explanation_df.set_index("Symptom")
+                )
+
+            # ---------------------------------------------
+            # Triage Card
+            # ---------------------------------------------
+
+            st.markdown(
+                f"""
+        <div style="
+        padding:20px;
+        border-radius:12px;
+        border:2px solid #4CAF50;
+        background-color:#F8FFF8;
+        ">
+
+        <h3>🏥 AI TRIAGE REPORT</h3>
+
+        <b>Patient</b><br>
+        {patient.full_name}
+
+        <br><br>
+        
+        <b>Medical History</b><br>
+        {", ".join(medical_history) if medical_history else "None"}
+
+        <br><br>
+        
+        <b>Other</b><br>
+        {other_history}
+
+        <br><br>
+
+        <b>Predicted Disease</b><br>
+        {prediction['predicted_disease']}
+
+        <br><br>
+
+        <b>Confidence</b><br>
+        {confidence:.2f} %
+
+        <br><br>
+
+        <b>Risk Level</b><br>
+        {risk_color} {risk}
+
+        <br><br>
+
+        <b>Recommendation</b><br>
+        {prediction['recommendation']}
+
+        </div>
+        """,
+                unsafe_allow_html=True,
+            )
+
+            st.write("")
+
+            # ---------------------------------------------
+            # Top Predictions
+            # ---------------------------------------------
+
+            st.subheader("📊 Top Predictions")
+
+            prediction_rows = []
+
+            for row in prediction["top_predictions"]:
+                prediction_rows.append(
+                    {
+                        "Disease": row["disease"],
+                        "Confidence (%)": row["confidence"],
+                    }
+                )
+
+            prediction_df = pd.DataFrame(
+                prediction_rows
+            )
+
+            st.dataframe(
+                prediction_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.divider()
+
+            # ---------------------------------------------
+            # Prediction Confidence
+            # ---------------------------------------------
+
+            st.subheader("🎯 Prediction Confidence")
+
+            st.progress(min(confidence / 100, 1.0))
+
+            st.caption(
+                f"The AI model is **{confidence:.2f}%** confident in its prediction."
+            )
+
+            # ---------------------------------------------
+            # Risk Assessment
+            # ---------------------------------------------
+
+            if risk == "Critical":
+
+                st.error(
+                    "🚨 CRITICAL RISK\n\nImmediate emergency medical attention is recommended."
+                )
+
+            elif risk == "High":
+
+                st.warning(
+                    "⚠️ HIGH RISK\n\nRefer the patient to the nearest physician or hospital."
+                )
+
+            elif risk == "Medium":
+
+                st.info(
+                    "🟡 MEDIUM RISK\n\nClinical evaluation and follow-up are recommended."
+                )
+
+            else:
+
+                st.success(
+                    "🟢 LOW RISK\n\nHome care and routine monitoring are recommended."
+                )
+
+            # ---------------------------------------------
+            # Selected Symptoms
+            # ---------------------------------------------
+
+            st.subheader("🩺 Selected Symptoms")
+
+            cols = st.columns(3)
+
+            for index, symptom in enumerate(
+                    st.session_state.selected_symptoms
+            ):
+                cols[index % 3].success(
+
+                    symptom.replace("_", " ").title()
+
+                )
+
+            # ---------------------------------------------
+            # Consultation Summary
+            # ---------------------------------------------
+
+            summary = f"""
+            RURALCAREAI CONSULTATION REPORT
+
+            -----------------------------------------
+
+            Patient ID : {patient.patient_code}
+
+            Patient Name : {patient.full_name}
+
+            Age : {patient.age}
+
+            Gender : {patient.gender}
+
+            Village : {patient.village}
+
+            -----------------------------------------
+
+            Symptoms
+
+            {", ".join(s.replace("_"," ").title()
+
+            for s in st.session_state.selected_symptoms)}
+
+            -----------------------------------------
+
+            Predicted Disease
+
+            {prediction['predicted_disease']}
+
+            Confidence
+
+            {confidence:.2f} %
+
+            Risk
+
+            {risk}
+
+            Recommendation
+
+            {prediction['recommendation']}
+
+            Doctor Notes
+
+            """
+
+            st.download_button(
+                "📄 Download Consultation Report",
+                summary,
+                file_name=f"{patient.patient_code}_consultation.txt",
+            )
+            # ---------------------------------------------
+            # Doctor Notes
+            # ---------------------------------------------
+
+            st.subheader("📝 Doctor Notes")
+
+            notes = st.text_area(
+                "Clinical Notes",
+                value=st.session_state.doctor_notes,
+                height=150,
+                placeholder="Enter observations, treatment advice, medicines etc.",
+            )
+
+            st.session_state.doctor_notes = notes
+
+            left, right = st.columns([1, 4])
+
+            with left:
+
+                save = st.button(
+                    "💾 Save Consultation",
+                    type="primary",
+                    use_container_width=True,
+                )
+
+            with right:
+
+                if st.button(
+                        "🧹 Clear",
+                        use_container_width=True,
+                ):
+                    st.session_state.selected_symptoms = []
+                    st.session_state.consultation_prediction = None
+                    st.session_state.doctor_notes = ""
+
+                    st.rerun()
+
+            if save:
+
+                try:
+
+                    consultation_service.save_consultation(
+
+                        patient_id=patient.id,
+
+                        symptoms=st.session_state.selected_symptoms,
+
+                        prediction_result=prediction,
+
+                        doctor_notes=notes,
+
+                        image_path=(
+                            image_prediction["image_path"]
+                            if image_prediction else None
+                        ),
+
+                        image_prediction=(
+                            image_prediction["prediction"]
+                            if image_prediction else None
+                        ),
+
+                        image_confidence=(
+                            image_prediction["confidence"]
+                            if image_prediction else None
+                        ),
+
+                    )
+
+                    st.success(
+                        "✅ Consultation saved successfully."
+                    )
+                    reports_dir = Path("reports")
+
+                    reports_dir.mkdir(exist_ok=True)
+
+                    pdf_file = reports_dir / f"{patient.patient_code}.pdf"
+
+                    PDFGenerator.generate_consultation_report(
+
+                        filename=str(pdf_file),
+
+                        patient=patient,
+
+                        prediction=prediction,
+
+                        symptoms=st.session_state.selected_symptoms,
+
+                        doctor_notes=notes,
+
+                    )
+
+                    with open(pdf_file, "rb") as pdf:
+
+                        st.download_button(
+
+                            "📄 Download PDF Report",
+
+                            pdf,
+
+                            file_name=pdf_file.name,
+
+                            mime="application/pdf",
+
+                        )
+
+                    st.balloons()
+
+                    st.session_state.consultation_prediction = None
+                    st.session_state.selected_symptoms = []
+                    st.session_state.doctor_notes = ""
+
+                    st.rerun()
+
+                except Exception as ex:
+
+                    st.exception(ex)

@@ -1,0 +1,38 @@
+# =============================================================================
+# RuralCare AI
+# BITS Pilani M.Tech (AI & ML) Dissertation Project
+#
+# AI-Based Rural Healthcare Triage Assistant using Multimodal Machine Learning
+#
+# Author : Sarwajit Kumar Mishra
+# =============================================================================
+
+
+# =============================================================================
+# RuralCare AI
+# Foundation Dependencies
+# =============================================================================
+streamlit>=1.46.0
+sqlalchemy>=2.0.41
+alembic>=1.16.4
+pydantic>=2.11.7
+python-dotenv>=1.1.1
+pandas>=2.3.1
+numpy>=2.3.1
+scikit-learn>=1.7.0
+joblib>=1.5.1
+matplotlib>=3.10.3
+plotly>=6.2.0
+openpyxl>=3.1.5
+Pillow>=11.3.0
+opencv-python>=4.12.0
+reportlab>=4.4.2
+shap>=0.48.0
+openai-whisper>=20250625
+torch>=2.7.1
+torchvision>=0.22.1
+transformers>=4.53.2
+sentence-transformers>=5.0.0
+tqdm>=4.67.1
+loguru>=0.7.3
+bcrypt==4.2.0

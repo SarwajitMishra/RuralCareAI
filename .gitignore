@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+database/*.db
+database/*.sqlite
+database/*.sqlite3
+
+# Datasets (exclude entire folder - too large for git)
+datasets/
+data/
+
+# Logs
+logs/
+*.log
+
+# Reports
+reports/*.pdf
+reports/*.xlsx
+reports/*.csv
+
+# Uploads
+uploads/
+
+# Model Artifacts
+models/*.joblib
+models/*.pkl
+models/*.pt
+models/*.pth
+models/*.onnx
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Environment
+.env
+
+# Jupyter
+.ipynb_checkpoints/
