@@ -30,6 +30,10 @@ import tempfile
 
 from src.ml.predictor import DiseasePredictor
 from src.image.image_predictor import ImagePredictor
+from src.ml.fusion_engine import FusionEngine
+from src.ml.risk_engine import RiskEngine
+from src.ai.llm_service import LLMService
+from src.knowledge.knowledge_base import KnowledgeBase
 
 # ---------------------------------------------------------
 # Services
@@ -39,10 +43,12 @@ patient_service = PatientService()
 consultation_service = ConsultationService()
 symptom_service = SymptomService()
 symptom_extractor = SymptomExtractor()
-from src.ml.fusion_engine import FusionEngine
 image_service = ImageService()
 voice_service = VoiceService()
 fusion_engine = FusionEngine()
+llm_service = LLMService()
+knowledge_base = KnowledgeBase()
+
 # ---------------------------------------------------------
 # ML Models
 # ---------------------------------------------------------
@@ -58,6 +64,14 @@ image_predictor = ImagePredictor()
 DEFAULTS = {
 
     "consultation_prediction": None,
+
+    "fusion_result": None,
+
+    "knowledge": None,
+
+    "ai_summary": None,
+
+    "voice_transcript": None,
 
     "selected_patient_id": None,
 
@@ -362,6 +376,8 @@ def show_consultation():
 
         user_input = voice_result["transcript"]
 
+        st.session_state.voice_transcript = voice_result["transcript"]
+
     st.write("")
 
     selected_symptoms = st.multiselect(
@@ -454,398 +470,536 @@ def show_consultation():
 
         machine_symptoms = selected_symptoms
 
+        # Symptom-based (Random Forest) prediction, enriched with a
+        # preliminary risk assessment.
         prediction = consultation_service.predict(
-            machine_symptoms
+            machine_symptoms,
+            medical_history=medical_history,
         )
 
+        # Multimodal late-fusion of the text and (optional) image
+        # predictions into a single final result.
         fusion_result = fusion_engine.fuse(
             prediction,
             image_prediction
         )
 
+        # Risk must reflect the FINAL fused disease, which can differ
+        # from the text-only prediction when the image model overrides it.
+        final_risk = RiskEngine.assess(
+            disease=fusion_result["predicted_disease"],
+            confidence=fusion_result["confidence"],
+            medical_history=medical_history,
+            symptoms=machine_symptoms,
+        )
+
+        fusion_result["risk_level"] = final_risk["level"]
+        fusion_result["recommendation"] = final_risk["recommendation"]
+
+        # Retrieve grounded healthcare knowledge (RAG) for the final
+        # predicted disease.
+        knowledge = knowledge_base.retrieve(fusion_result["predicted_disease"])
+
+        # AI-assisted clinical summary via the local LLM (Gemma 3 / Ollama),
+        # grounded with the retrieved knowledge.
+        with st.spinner("Generating AI clinical summary..."):
+            ai_summary = llm_service.generate_report(
+                patient,
+                machine_symptoms,
+                fusion_result,
+                knowledge,
+            )
+
         st.session_state.consultation_prediction = prediction
+        st.session_state.fusion_result = fusion_result
+        st.session_state.knowledge = knowledge
+        st.session_state.ai_summary = ai_summary
 
-        # -------------------------------------------------
-        # AI Prediction Result
-        # -------------------------------------------------
+    # -------------------------------------------------
+    # AI Prediction Result
+    #
+    # Reads from session_state (rather than being nested inside
+    # "if predict:") so that it, and the Save/Clear/Doctor Notes
+    # controls below it, keep rendering across reruns triggered by
+    # OTHER widgets (e.g. clicking "Save Consultation" itself is a
+    # separate rerun on which "predict" is False).
+    # -------------------------------------------------
 
-        prediction = st.session_state.consultation_prediction
+    prediction = st.session_state.consultation_prediction
+    fusion_result = st.session_state.fusion_result
+    knowledge = st.session_state.knowledge
+    ai_summary = st.session_state.ai_summary
 
-        if prediction is not None:
+    if prediction is not None:
 
-            st.divider()
+        st.divider()
 
-            st.subheader("🧠 AI Triage Result")
+        st.subheader("🧠 AI Triage Result")
 
-            confidence = prediction["confidence"]
-            risk = prediction["risk_level"]
+        confidence = fusion_result["confidence"]
+        risk = fusion_result["risk_level"]
+        predicted_disease = fusion_result["predicted_disease"]
 
-            if risk == "Critical":
-                risk_color = "🔴"
-            elif risk == "High":
-                risk_color = "🟠"
-            elif risk == "Medium":
-                risk_color = "🟡"
-            else:
-                risk_color = "🟢"
+        if risk == "Critical":
+            risk_color = "🔴"
+        elif risk == "High":
+            risk_color = "🟠"
+        elif risk == "Medium":
+            risk_color = "🟡"
+        else:
+            risk_color = "🟢"
 
-            metric1, metric2, metric3 = st.columns(3)
+        metric1, metric2, metric3 = st.columns(3)
 
-            with metric1:
+        with metric1:
 
-                st.metric(
-                    "Predicted Disease",
-                    fusion_result["final_prediction"],
-                )
-
-            with metric2:
-
-                st.metric(
-                    "Confidence",
-                    f"{confidence:.2f} %",
-                )
-
-            with metric3:
-
-                st.metric(
-                    "Risk Level",
-                    f"{risk_color} {risk}",
-                )
-
-            st.success(
-                prediction["recommendation"]
+            st.metric(
+                "Predicted Disease",
+                predicted_disease,
             )
 
-            st.subheader("🧠 Why did the AI predict this?")
+            hindi_name = knowledge.get("hindi")
 
-            explanation = disease_predictor.explain_prediction(
-                st.session_state.selected_symptoms
+            if hindi_name:
+                st.caption(f"🇮🇳 {hindi_name}")
+
+        with metric2:
+
+            st.metric(
+                "Confidence",
+                f"{confidence:.2f} %",
             )
 
-            if explanation:
-                explanation_df = pd.DataFrame(explanation)
+        with metric3:
 
-                explanation_df["Importance"] = (
-                        explanation_df["Importance"] * 100
-                ).round(2)
-
-                st.dataframe(
-                    explanation_df,
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-                st.bar_chart(
-                    explanation_df.set_index("Symptom")
-                )
-
-            # ---------------------------------------------
-            # Triage Card
-            # ---------------------------------------------
-
-            st.markdown(
-                f"""
-        <div style="
-        padding:20px;
-        border-radius:12px;
-        border:2px solid #4CAF50;
-        background-color:#F8FFF8;
-        ">
-
-        <h3>🏥 AI TRIAGE REPORT</h3>
-
-        <b>Patient</b><br>
-        {patient.full_name}
-
-        <br><br>
-        
-        <b>Medical History</b><br>
-        {", ".join(medical_history) if medical_history else "None"}
-
-        <br><br>
-        
-        <b>Other</b><br>
-        {other_history}
-
-        <br><br>
-
-        <b>Predicted Disease</b><br>
-        {prediction['predicted_disease']}
-
-        <br><br>
-
-        <b>Confidence</b><br>
-        {confidence:.2f} %
-
-        <br><br>
-
-        <b>Risk Level</b><br>
-        {risk_color} {risk}
-
-        <br><br>
-
-        <b>Recommendation</b><br>
-        {prediction['recommendation']}
-
-        </div>
-        """,
-                unsafe_allow_html=True,
+            st.metric(
+                "Risk Level",
+                f"{risk_color} {risk}",
             )
 
-            st.write("")
+        st.success(
+            fusion_result["recommendation"]
+        )
 
-            # ---------------------------------------------
-            # Top Predictions
-            # ---------------------------------------------
-
-            st.subheader("📊 Top Predictions")
-
-            prediction_rows = []
-
-            for row in prediction["top_predictions"]:
-                prediction_rows.append(
-                    {
-                        "Disease": row["disease"],
-                        "Confidence (%)": row["confidence"],
-                    }
-                )
-
-            prediction_df = pd.DataFrame(
-                prediction_rows
+        if "image_prediction" in fusion_result:
+            st.caption(
+                f"Fusion source: {fusion_result['decision_source']} "
+                f"(image predicted: {fusion_result['image_prediction']} "
+                f"at {fusion_result['image_confidence']:.2f}%)"
             )
+
+        st.subheader("🧠 Why did the AI predict this? (SHAP)")
+
+        st.caption(
+            "Per-prediction SHAP contribution of each selected symptom "
+            "toward the symptom-based model's predicted disease. "
+            "Positive values push toward the prediction, negative "
+            "values push away from it."
+        )
+
+        explanation = disease_predictor.explain_prediction(
+            st.session_state.selected_symptoms
+        )
+
+        if explanation:
+            explanation_df = pd.DataFrame(explanation)
+
+            explanation_df["Importance"] = explanation_df["Importance"].round(4)
 
             st.dataframe(
-                prediction_df,
+                explanation_df,
                 use_container_width=True,
                 hide_index=True,
             )
 
-            st.divider()
-
-            # ---------------------------------------------
-            # Prediction Confidence
-            # ---------------------------------------------
-
-            st.subheader("🎯 Prediction Confidence")
-
-            st.progress(min(confidence / 100, 1.0))
-
-            st.caption(
-                f"The AI model is **{confidence:.2f}%** confident in its prediction."
+            st.bar_chart(
+                explanation_df.set_index("Symptom")
             )
 
-            # ---------------------------------------------
-            # Risk Assessment
-            # ---------------------------------------------
+        # ---------------------------------------------
+        # Knowledge Base (RAG)
+        # ---------------------------------------------
 
-            if risk == "Critical":
+        st.subheader("📚 Disease Information")
 
-                st.error(
-                    "🚨 CRITICAL RISK\n\nImmediate emergency medical attention is recommended."
+        know_col1, know_col2 = st.columns(2)
+
+        with know_col1:
+
+            st.markdown(f"**Description**\n\n{knowledge.get('description', 'N/A')}")
+
+            st.markdown("**Precautions**")
+            for item in knowledge.get("precautions", []):
+                st.write(f"- {item}")
+
+            st.markdown("**First Aid**")
+            for item in knowledge.get("first_aid", []):
+                st.write(f"- {item}")
+
+        with know_col2:
+
+            st.markdown(
+                f"**When to consult a doctor**\n\n"
+                f"{knowledge.get('when_to_consult', 'N/A')}"
+            )
+
+            st.markdown("**🚩 Emergency Warning Signs**")
+            for item in knowledge.get("emergency_signs", []):
+                st.error(item)
+
+        # ---------------------------------------------
+        # AI Clinical Summary (Local LLM)
+        # ---------------------------------------------
+
+        st.subheader("🤖 AI Clinical Summary")
+
+        st.info(ai_summary)
+
+        # ---------------------------------------------
+        # Triage Card
+        # ---------------------------------------------
+
+        st.markdown(
+            f"""
+    <div style="
+    padding:20px;
+    border-radius:12px;
+    border:2px solid #4CAF50;
+    background-color:#F8FFF8;
+    ">
+
+    <h3>🏥 AI TRIAGE REPORT</h3>
+
+    <b>Patient</b><br>
+    {patient.full_name}
+
+    <br><br>
+
+    <b>Medical History</b><br>
+    {", ".join(medical_history) if medical_history else "None"}
+
+    <br><br>
+
+    <b>Other</b><br>
+    {other_history}
+
+    <br><br>
+
+    <b>Predicted Disease</b><br>
+    {predicted_disease}
+
+    <br><br>
+
+    <b>Confidence</b><br>
+    {confidence:.2f} %
+
+    <br><br>
+
+    <b>Risk Level</b><br>
+    {risk_color} {risk}
+
+    <br><br>
+
+    <b>Recommendation</b><br>
+    {fusion_result['recommendation']}
+
+    </div>
+    """,
+            unsafe_allow_html=True,
+        )
+
+        st.write("")
+
+        # ---------------------------------------------
+        # Top Predictions
+        # ---------------------------------------------
+
+        st.subheader("📊 Top Predictions")
+
+        prediction_rows = []
+
+        for row in prediction["top_predictions"]:
+            prediction_rows.append(
+                {
+                    "Disease": row["disease"],
+                    "Confidence (%)": row["confidence"],
+                }
+            )
+
+        prediction_df = pd.DataFrame(
+            prediction_rows
+        )
+
+        st.dataframe(
+            prediction_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        st.divider()
+
+        # ---------------------------------------------
+        # Prediction Confidence
+        # ---------------------------------------------
+
+        st.subheader("🎯 Prediction Confidence")
+
+        st.progress(min(confidence / 100, 1.0))
+
+        st.caption(
+            f"The AI model is **{confidence:.2f}%** confident in its prediction."
+        )
+
+        # ---------------------------------------------
+        # Risk Assessment
+        # ---------------------------------------------
+
+        if risk == "Critical":
+
+            st.error(
+                "🚨 CRITICAL RISK\n\nImmediate emergency medical attention is recommended."
+            )
+
+        elif risk == "High":
+
+            st.warning(
+                "⚠️ HIGH RISK\n\nRefer the patient to the nearest physician or hospital."
+            )
+
+        elif risk == "Medium":
+
+            st.info(
+                "🟡 MEDIUM RISK\n\nClinical evaluation and follow-up are recommended."
+            )
+
+        else:
+
+            st.success(
+                "🟢 LOW RISK\n\nHome care and routine monitoring are recommended."
+            )
+
+        # ---------------------------------------------
+        # Selected Symptoms
+        # ---------------------------------------------
+
+        st.subheader("🩺 Selected Symptoms")
+
+        cols = st.columns(3)
+
+        for index, symptom in enumerate(
+                st.session_state.selected_symptoms
+        ):
+            cols[index % 3].success(
+
+                symptom.replace("_", " ").title()
+
+            )
+
+        # ---------------------------------------------
+        # Consultation Summary
+        # ---------------------------------------------
+
+        summary = f"""
+        RURALCAREAI CONSULTATION REPORT
+
+        -----------------------------------------
+
+        Patient ID : {patient.patient_code}
+
+        Patient Name : {patient.full_name}
+
+        Age : {patient.age}
+
+        Gender : {patient.gender}
+
+        Village : {patient.village}
+
+        -----------------------------------------
+
+        Symptoms
+
+        {", ".join(s.replace("_"," ").title()
+
+        for s in st.session_state.selected_symptoms)}
+
+        -----------------------------------------
+
+        Predicted Disease
+
+        {predicted_disease}
+
+        Confidence
+
+        {confidence:.2f} %
+
+        Risk
+
+        {risk}
+
+        Recommendation
+
+        {fusion_result['recommendation']}
+
+        AI Clinical Summary
+
+        {ai_summary}
+
+        Doctor Notes
+
+        """
+
+        st.download_button(
+            "📄 Download Consultation Report",
+            summary,
+            file_name=f"{patient.patient_code}_consultation.txt",
+        )
+        # ---------------------------------------------
+        # Doctor Notes
+        # ---------------------------------------------
+
+        st.subheader("📝 Doctor Notes")
+
+        notes = st.text_area(
+            "Clinical Notes",
+            value=st.session_state.doctor_notes,
+            height=150,
+            placeholder="Enter observations, treatment advice, medicines etc.",
+        )
+
+        st.session_state.doctor_notes = notes
+
+        left, right = st.columns([1, 4])
+
+        with left:
+
+            save = st.button(
+                "💾 Save Consultation",
+                type="primary",
+                use_container_width=True,
+            )
+
+        with right:
+
+            if st.button(
+                    "🧹 Clear",
+                    use_container_width=True,
+            ):
+                st.session_state.selected_symptoms = []
+                st.session_state.consultation_prediction = None
+                st.session_state.fusion_result = None
+                st.session_state.knowledge = None
+                st.session_state.ai_summary = None
+                st.session_state.voice_transcript = None
+                st.session_state.doctor_notes = ""
+
+                st.rerun()
+
+        if save:
+
+            try:
+
+                save_prediction_result = {
+                    **prediction,
+                    "risk_level": fusion_result["risk_level"],
+                    "recommendation": fusion_result["recommendation"],
+                }
+
+                consultation_service.save_consultation(
+
+                    patient_id=patient.id,
+
+                    symptoms=st.session_state.selected_symptoms,
+
+                    prediction_result=save_prediction_result,
+
+                    doctor_notes=notes,
+
+                    image_path=(
+                        image_prediction["image_path"]
+                        if image_prediction else None
+                    ),
+
+                    image_prediction=(
+                        image_prediction["prediction"]
+                        if image_prediction else None
+                    ),
+
+                    image_confidence=(
+                        image_prediction["confidence"]
+                        if image_prediction else None
+                    ),
+
+                    voice_transcript=st.session_state.voice_transcript,
+
+                    fusion_prediction=(
+                        fusion_result["predicted_disease"]
+                        if image_prediction else None
+                    ),
+
+                    fusion_confidence=(
+                        fusion_result["confidence"]
+                        if image_prediction else None
+                    ),
+
+                    ai_summary=ai_summary,
+
                 )
-
-            elif risk == "High":
-
-                st.warning(
-                    "⚠️ HIGH RISK\n\nRefer the patient to the nearest physician or hospital."
-                )
-
-            elif risk == "Medium":
-
-                st.info(
-                    "🟡 MEDIUM RISK\n\nClinical evaluation and follow-up are recommended."
-                )
-
-            else:
 
                 st.success(
-                    "🟢 LOW RISK\n\nHome care and routine monitoring are recommended."
+                    "✅ Consultation saved successfully."
+                )
+                reports_dir = Path("reports")
+
+                reports_dir.mkdir(exist_ok=True)
+
+                pdf_file = reports_dir / f"{patient.patient_code}.pdf"
+
+                PDFGenerator.generate_consultation_report(
+
+                    filename=str(pdf_file),
+
+                    patient=patient,
+
+                    prediction=save_prediction_result,
+
+                    symptoms=st.session_state.selected_symptoms,
+
+                    doctor_notes=notes,
+
+                    explanation=explanation,
+
+                    knowledge=knowledge,
+
+                    ai_summary=ai_summary,
+
                 )
 
-            # ---------------------------------------------
-            # Selected Symptoms
-            # ---------------------------------------------
+                with open(pdf_file, "rb") as pdf:
 
-            st.subheader("🩺 Selected Symptoms")
+                    st.download_button(
 
-            cols = st.columns(3)
+                        "📄 Download PDF Report",
 
-            for index, symptom in enumerate(
-                    st.session_state.selected_symptoms
-            ):
-                cols[index % 3].success(
+                        pdf,
 
-                    symptom.replace("_", " ").title()
+                        file_name=pdf_file.name,
 
-                )
-
-            # ---------------------------------------------
-            # Consultation Summary
-            # ---------------------------------------------
-
-            summary = f"""
-            RURALCAREAI CONSULTATION REPORT
-
-            -----------------------------------------
-
-            Patient ID : {patient.patient_code}
-
-            Patient Name : {patient.full_name}
-
-            Age : {patient.age}
-
-            Gender : {patient.gender}
-
-            Village : {patient.village}
-
-            -----------------------------------------
-
-            Symptoms
-
-            {", ".join(s.replace("_"," ").title()
-
-            for s in st.session_state.selected_symptoms)}
-
-            -----------------------------------------
-
-            Predicted Disease
-
-            {prediction['predicted_disease']}
-
-            Confidence
-
-            {confidence:.2f} %
-
-            Risk
-
-            {risk}
-
-            Recommendation
-
-            {prediction['recommendation']}
-
-            Doctor Notes
-
-            """
-
-            st.download_button(
-                "📄 Download Consultation Report",
-                summary,
-                file_name=f"{patient.patient_code}_consultation.txt",
-            )
-            # ---------------------------------------------
-            # Doctor Notes
-            # ---------------------------------------------
-
-            st.subheader("📝 Doctor Notes")
-
-            notes = st.text_area(
-                "Clinical Notes",
-                value=st.session_state.doctor_notes,
-                height=150,
-                placeholder="Enter observations, treatment advice, medicines etc.",
-            )
-
-            st.session_state.doctor_notes = notes
-
-            left, right = st.columns([1, 4])
-
-            with left:
-
-                save = st.button(
-                    "💾 Save Consultation",
-                    type="primary",
-                    use_container_width=True,
-                )
-
-            with right:
-
-                if st.button(
-                        "🧹 Clear",
-                        use_container_width=True,
-                ):
-                    st.session_state.selected_symptoms = []
-                    st.session_state.consultation_prediction = None
-                    st.session_state.doctor_notes = ""
-
-                    st.rerun()
-
-            if save:
-
-                try:
-
-                    consultation_service.save_consultation(
-
-                        patient_id=patient.id,
-
-                        symptoms=st.session_state.selected_symptoms,
-
-                        prediction_result=prediction,
-
-                        doctor_notes=notes,
-
-                        image_path=(
-                            image_prediction["image_path"]
-                            if image_prediction else None
-                        ),
-
-                        image_prediction=(
-                            image_prediction["prediction"]
-                            if image_prediction else None
-                        ),
-
-                        image_confidence=(
-                            image_prediction["confidence"]
-                            if image_prediction else None
-                        ),
+                        mime="application/pdf",
 
                     )
 
-                    st.success(
-                        "✅ Consultation saved successfully."
-                    )
-                    reports_dir = Path("reports")
+                st.balloons()
 
-                    reports_dir.mkdir(exist_ok=True)
+                st.session_state.consultation_prediction = None
+                st.session_state.fusion_result = None
+                st.session_state.knowledge = None
+                st.session_state.ai_summary = None
+                st.session_state.voice_transcript = None
+                st.session_state.selected_symptoms = []
+                st.session_state.doctor_notes = ""
 
-                    pdf_file = reports_dir / f"{patient.patient_code}.pdf"
+                st.rerun()
 
-                    PDFGenerator.generate_consultation_report(
+            except Exception as ex:
 
-                        filename=str(pdf_file),
-
-                        patient=patient,
-
-                        prediction=prediction,
-
-                        symptoms=st.session_state.selected_symptoms,
-
-                        doctor_notes=notes,
-
-                    )
-
-                    with open(pdf_file, "rb") as pdf:
-
-                        st.download_button(
-
-                            "📄 Download PDF Report",
-
-                            pdf,
-
-                            file_name=pdf_file.name,
-
-                            mime="application/pdf",
-
-                        )
-
-                    st.balloons()
-
-                    st.session_state.consultation_prediction = None
-                    st.session_state.selected_symptoms = []
-                    st.session_state.doctor_notes = ""
-
-                    st.rerun()
-
-                except Exception as ex:
-
-                    st.exception(ex)
+                st.exception(ex)

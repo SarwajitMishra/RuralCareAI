@@ -20,6 +20,7 @@ from sqlalchemy.orm import joinedload
 from src.database.database import get_session
 from src.database.models.consultation import Consultation
 from src.ml.predictor import DiseasePredictor
+from src.ml.risk_engine import RiskEngine
 
 
 class ConsultationService:
@@ -31,17 +32,32 @@ class ConsultationService:
     # Prediction
     # ---------------------------------------------------------
 
-    def predict(self, symptoms: list[str]) -> dict:
+    def predict(
+        self,
+        symptoms: list[str],
+        medical_history: list[str] | None = None,
+    ) -> dict:
         """
-        Predict disease using the trained ML model.
+        Predict disease using the trained ML model, then run the
+        unified Risk Assessment Engine (disease severity + confidence
+        + comorbidities + red-flag symptoms) to determine risk level.
         """
 
         result = self.predictor.predict(symptoms)
 
         disease = result["predicted_disease"]
 
-        result["risk_level"] = self._risk_level(disease)
-        result["recommendation"] = self._recommendation(disease)
+        risk = RiskEngine.assess(
+            disease=disease,
+            confidence=result["confidence"],
+            medical_history=medical_history,
+            symptoms=symptoms,
+        )
+
+        result["risk_level"] = risk["level"]
+        result["risk_score"] = risk["score"]
+        result["risk_reasons"] = risk["reasons"]
+        result["recommendation"] = risk["recommendation"]
 
         return result
 
@@ -60,7 +76,8 @@ class ConsultationService:
             image_confidence: float | None = None,
             voice_transcript: str | None = None,
             fusion_prediction: str | None = None,
-            fusion_confidence: float | None = None
+            fusion_confidence: float | None = None,
+            ai_summary: str | None = None,
     ) -> Consultation:
         """
         Save consultation into the database.
@@ -77,6 +94,7 @@ class ConsultationService:
                 confidence=prediction_result["confidence"],
                 risk_level=prediction_result["risk_level"],
                 recommendation=prediction_result["recommendation"],
+                ai_summary=ai_summary,
                 doctor_notes=doctor_notes,
                 image_path=image_path,
                 image_prediction=image_prediction,
@@ -156,69 +174,3 @@ class ConsultationService:
         finally:
             session.close()
 
-    # ---------------------------------------------------------
-    # Risk Engine
-    # ---------------------------------------------------------
-
-    @staticmethod
-    def _risk_level(disease: str) -> str:
-
-        critical = {
-            "Heart attack",
-            "Paralysis (brain hemorrhage)",
-        }
-
-        high = {
-            "Dengue",
-            "Malaria",
-            "Typhoid",
-            "Tuberculosis",
-            "Pneumonia",
-            "Hepatitis B",
-            "Hepatitis C",
-            "Hepatitis D",
-            "Hepatitis E",
-        }
-
-        medium = {
-            "Diabetes ",
-            "Hypertension ",
-            "Bronchial Asthma",
-            "Hypoglycemia",
-        }
-
-        if disease in critical:
-            return "Critical"
-
-        if disease in high:
-            return "High"
-
-        if disease in medium:
-            return "Medium"
-
-        return "Low"
-
-    # ---------------------------------------------------------
-    # Recommendation Engine
-    # ---------------------------------------------------------
-
-    @staticmethod
-    def _recommendation(disease: str) -> str:
-
-        risk = ConsultationService._risk_level(disease)
-
-        recommendations = {
-            "Critical":
-                "Immediate referral to the nearest emergency hospital.",
-
-            "High":
-                "Refer to a physician or district hospital within 24 hours.",
-
-            "Medium":
-                "Clinical evaluation and follow-up recommended.",
-
-            "Low":
-                "Home care, medication as advised, and monitor symptoms.",
-        }
-
-        return recommendations[risk]

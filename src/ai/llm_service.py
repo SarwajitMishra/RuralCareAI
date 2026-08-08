@@ -1,141 +1,155 @@
 """
-Offline LLM Service using Ollama + Gemma 3
+Local LLM Module for RuralCareAI.
+
+Generates an AI-assisted clinical summary using Gemma 3, executed
+locally through Ollama. The prompt is grounded with the disease
+knowledge retrieved by the Knowledge Retrieval Module (RAG), so the
+generated recommendations stay tied to verified healthcare content
+rather than being freely generated.
+
+Running the model locally keeps the application usable in
+environments with limited or intermittent internet connectivity.
+
+Author: Sarwajit Kumar Mishra
 """
 
 from __future__ import annotations
 
-import json
 import requests
 
 
 class LLMService:
 
-    def __init__(self):
-
+    def __init__(self, model: str = "gemma3:1b"):
         self.url = "http://localhost:11434/api/generate"
+        self.model = model
 
-        self.model = "gemma3:1b"
-
+    # -----------------------------------------------------
+    # Public API
     # -----------------------------------------------------
 
     def generate_report(
-
         self,
-
         patient,
-
-        symptoms,
-
-        prediction,
-
+        symptoms: list[str],
+        prediction: dict,
+        knowledge: dict | None = None,
     ) -> str:
+        """
+        Generate an AI-assisted clinical summary.
 
-        prompt = self._build_prompt(
+        Parameters
+        ----------
+        patient : Patient
+            The patient database record.
+        symptoms : list[str]
+            Machine-readable symptom names selected for this consultation.
+        prediction : dict
+            Final prediction dict, expected to contain at least
+            'predicted_disease', 'confidence', 'risk_level',
+            'recommendation'.
+        knowledge : dict | None
+            Retrieved knowledge-base entry for the predicted disease
+            (description, precautions, first_aid, when_to_consult,
+            emergency_signs) used to ground the summary.
+        """
 
-            patient,
-
-            symptoms,
-
-            prediction,
-
-        )
+        prompt = self._build_prompt(patient, symptoms, prediction, knowledge)
 
         return self._call_model(prompt)
 
     # -----------------------------------------------------
+    # Ollama call
+    # -----------------------------------------------------
 
-    def _call_model(self, prompt):
+    def _call_model(self, prompt: str) -> str:
 
         payload = {
-
             "model": self.model,
-
             "prompt": prompt,
-
             "stream": False,
-
         }
 
         try:
-
-            response = requests.post(
-
-                self.url,
-
-                json=payload,
-
-                timeout=120,
-
-            )
-
+            response = requests.post(self.url, json=payload, timeout=120)
             response.raise_for_status()
 
             data = response.json()
 
-            return data["response"]
+            return data["response"].strip()
+
+        except requests.exceptions.ConnectionError:
+            return (
+                "AI clinical summary unavailable: could not reach the local "
+                "Ollama server at localhost:11434. Make sure Ollama is "
+                "running and the gemma3 model has been pulled."
+            )
 
         except Exception as ex:
-
-            return f"LLM Error: {ex}"
+            return f"AI clinical summary unavailable: {ex}"
 
     # -----------------------------------------------------
+    # Prompt construction
+    # -----------------------------------------------------
 
+    @staticmethod
     def _build_prompt(
-
-        self,
-
         patient,
+        symptoms: list[str],
+        prediction: dict,
+        knowledge: dict | None,
+    ) -> str:
 
-        symptoms,
+        knowledge = knowledge or {}
 
-        prediction,
+        readable_symptoms = ", ".join(
+            symptom.replace("_", " ") for symptom in symptoms
+        )
 
-    ):
+        precautions = "; ".join(knowledge.get("precautions", [])) or "Not available"
+        first_aid = "; ".join(knowledge.get("first_aid", [])) or "Not available"
+        emergency_signs = (
+            "; ".join(knowledge.get("emergency_signs", [])) or "Not available"
+        )
+        when_to_consult = knowledge.get("when_to_consult", "Not available")
 
         return f"""
-You are an experienced rural healthcare physician.
+You are an experienced rural healthcare physician assisting a frontline
+healthcare worker. Use ONLY the reference information provided below;
+do not invent clinical facts beyond it.
 
 Patient
-
 Name: {patient.full_name}
-
 Age: {patient.age}
-
 Gender: {patient.gender}
 
-Symptoms
+Reported Symptoms
+{readable_symptoms}
 
-{", ".join(symptoms)}
+AI Prediction
+Disease: {prediction.get("predicted_disease")}
+Confidence: {prediction.get("confidence", 0):.2f}%
+Risk Level: {prediction.get("risk_level")}
+Recommendation: {prediction.get("recommendation")}
 
-AI Diagnosis
+Reference Knowledge (verified)
+Description: {knowledge.get("description", "Not available")}
+Precautions: {precautions}
+First Aid: {first_aid}
+When to consult a doctor: {when_to_consult}
+Emergency warning signs: {emergency_signs}
 
-Disease:
-{prediction["fusion_prediction"]}
-
-Confidence:
-{prediction["fusion_confidence"]:.2f}%
-
-Risk:
-{prediction["risk_level"]}
-
-Recommendation:
-{prediction["recommendation"]}
-
-Generate a report using these headings only:
+Generate a report using exactly these headings:
 
 1. Clinical Summary
-
 2. Possible Reasoning
-
 3. Immediate Advice
-
 4. Home Care
-
 5. Red Flag Symptoms
-
 6. Referral Recommendation
 
+Keep the response under 200 words in total.
 Do not prescribe medicines.
-
-Mention that the AI is an assistant and not a replacement for a doctor.
+Mention that this is an AI-generated assistive summary and not a
+replacement for a qualified doctor.
 """
