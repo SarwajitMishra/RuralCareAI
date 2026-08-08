@@ -15,13 +15,18 @@ Author: Sarwajit Kumar Mishra
 
 from __future__ import annotations
 
+import os
+
 import requests
 
 
 class LLMService:
 
     def __init__(self, model: str = "gemma3:1b"):
-        self.url = "http://localhost:11434/api/generate"
+        # OLLAMA_HOST lets this point at a separate container (e.g. the
+        # "ollama" service in docker-compose) instead of localhost.
+        host = os.environ.get("OLLAMA_HOST", "localhost:11434")
+        self.url = f"http://{host}/api/generate"
         self.model = model
 
     # -----------------------------------------------------

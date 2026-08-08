@@ -73,6 +73,10 @@ DEFAULTS = {
 
     "voice_transcript": None,
 
+    "consultation_saved": False,
+
+    "saved_pdf_path": None,
+
     "selected_patient_id": None,
 
     "selected_symptoms": [],
@@ -305,18 +309,36 @@ def show_consultation():
 
     st.session_state.other_history = other_history
     # -------------------------------------------------
-    # NLP Symptom Extraction
+    # Multimodal Symptom Input (Text / Voice / Image)
+    #
+    # All three modalities live in one unified block, matching the
+    # architecture diagram's parallel-input framing, instead of three
+    # separate full-width sections. Tabs don't create a separate
+    # Python scope, so user_input / voice_file / uploaded_image /
+    # image_prediction are set exactly as before - just presented
+    # more compactly.
     # -------------------------------------------------
 
-    st.subheader("🤒 Describe Symptoms")
+    st.subheader("🤒 Patient Symptoms & Media")
 
-    user_input = st.text_area(
+    st.caption(
+        "Provide symptoms via text or voice, and optionally upload a "
+        "skin image - combine as many modalities as apply."
+    )
 
-        "Describe the patient's symptoms",
+    tab_text, tab_voice, tab_image = st.tabs(
+        ["📝 Text", "🎤 Voice (Optional)", "📷 Skin Image (Optional)"]
+    )
 
-        height=120,
+    with tab_text:
 
-        placeholder="""
+        user_input = st.text_area(
+
+            "Describe the patient's symptoms",
+
+            height=120,
+
+            placeholder="""
     Examples:
 
     • I have fever and cough for 3 days
@@ -328,57 +350,99 @@ def show_consultation():
     • Chest pain with breathing difficulty
     """
 
-    )
-    # -------------------------------------------------
-    # Voice Input
-    # -------------------------------------------------
-
-    st.subheader("🎤 Voice Input (Optional)")
-
-    voice_file = st.file_uploader(
-
-        "Upload Voice Recording",
-
-        type=["wav", "mp3", "m4a"]
-
-    )
-
-    if voice_file:
-        with tempfile.NamedTemporaryFile(
-
-                delete=False,
-
-                suffix=".wav"
-
-        ) as tmp:
-            tmp.write(voice_file.read())
-
-            audio_path = tmp.name
-
-        with st.spinner("Transcribing voice..."):
-            voice_result = voice_service.transcribe(audio_path)
-
-        st.success("✅ Voice successfully transcribed")
-
-        st.text_area(
-
-            "Transcript",
-
-            value=voice_result["transcript"],
-
-            height=120,
-
-            disabled=True,
-
         )
 
-        # Replace typed text with transcript
+    with tab_voice:
 
-        user_input = voice_result["transcript"]
+        st.caption("Record symptoms with the microphone, as an alternative to typing.")
 
-        st.session_state.voice_transcript = voice_result["transcript"]
+        voice_file = st.audio_input("Record symptoms")
+
+        if voice_file:
+            with tempfile.NamedTemporaryFile(
+
+                    delete=False,
+
+                    suffix=".wav"
+
+            ) as tmp:
+                tmp.write(voice_file.read())
+
+                audio_path = tmp.name
+
+            with st.spinner("Transcribing voice..."):
+                voice_result = voice_service.transcribe(audio_path)
+
+            st.success("✅ Voice successfully transcribed")
+
+            st.text_area(
+
+                "Transcript",
+
+                value=voice_result["transcript"],
+
+                height=120,
+
+                disabled=True,
+
+            )
+
+            # Replace typed text with transcript
+
+            user_input = voice_result["transcript"]
+
+            st.session_state.voice_transcript = voice_result["transcript"]
+
+    with tab_image:
+
+        uploaded_image = st.file_uploader(
+            "Upload Skin Lesion",
+            type=["jpg", "jpeg", "png"],
+        )
+
+        image_prediction = None
+
+        if uploaded_image:
+
+            st.image(
+                uploaded_image,
+                caption="Uploaded Image",
+                width=300,
+            )
+
+            with st.spinner("Analyzing image..."):
+
+                try:
+
+                    image_prediction = image_service.predict(uploaded_image)
+
+                    st.success(
+                        f"Image Prediction: {image_prediction['prediction']}"
+                    )
+
+                    st.metric(
+                        "Image Confidence",
+                        f"{image_prediction['confidence'] * 100:.2f}%"
+                    )
+
+                except Exception as ex:
+
+                    st.error(str(ex))
 
     st.write("")
+
+    extract = st.button(
+        "🔍 Extract Symptoms from Text / Voice",
+        use_container_width=True,
+    )
+
+    if extract:
+
+        result = symptom_extractor.extract(user_input)
+
+        st.session_state.selected_symptoms = result["detected_symptoms"]
+
+        st.session_state.nlp_result = result
 
     selected_symptoms = st.multiselect(
 
@@ -394,43 +458,13 @@ def show_consultation():
 
     st.session_state.selected_symptoms = selected_symptoms
 
-    st.divider()
-
-    st.subheader("📷 Skin Lesion Image (Optional)")
-
-    uploaded_image = st.file_uploader(
-        "Upload Skin Lesion",
-        type=["jpg", "jpeg", "png"],
+    st.caption(
+        "Click **Extract Symptoms** to auto-fill this list from the text "
+        "or voice tab above, then add, remove, or correct any symptom "
+        "before predicting - your edits here are what gets predicted on."
     )
 
-    image_prediction = None
-
-    if uploaded_image:
-
-        st.image(
-            uploaded_image,
-            caption="Uploaded Image",
-            width=300,
-        )
-
-        with st.spinner("Analyzing image..."):
-
-            try:
-
-                image_prediction = image_service.predict(uploaded_image)
-
-                st.success(
-                    f"Image Prediction: {image_prediction['prediction']}"
-                )
-
-                st.metric(
-                    "Image Confidence",
-                    f"{image_prediction['confidence'] * 100:.2f}%"
-                )
-
-            except Exception as ex:
-
-                st.error(str(ex))
+    st.divider()
 
     st.write("")
 
@@ -446,24 +480,19 @@ def show_consultation():
 
     if predict:
 
-        # ---------------------------------------------
-        # Automatic NLP Extraction
-        # ---------------------------------------------
-
-        result = symptom_extractor.extract(user_input)
-
-        st.session_state.selected_symptoms = result[
-            "detected_symptoms"
-        ]
-
-        st.session_state.nlp_result = result
+        # Predicts on whatever is currently in the "AI Extracted
+        # Symptoms (Editable)" list above - populated by "Extract
+        # Symptoms" and/or manually edited by the healthcare worker.
+        # Re-running extraction here would silently discard any
+        # manual corrections, so it deliberately does not happen.
 
         selected_symptoms = st.session_state.selected_symptoms
 
         if len(selected_symptoms) == 0:
 
             st.error(
-                "Please select at least one symptom."
+                "Please click 'Extract Symptoms from Text / Voice' first, "
+                "or select at least one symptom manually."
             )
 
             return
@@ -530,7 +559,45 @@ def show_consultation():
     knowledge = st.session_state.knowledge
     ai_summary = st.session_state.ai_summary
 
-    if prediction is not None:
+    if st.session_state.consultation_saved:
+
+        # Persistent post-save screen: shown on every rerun (including
+        # the one triggered by clicking "Download PDF Report" itself)
+        # until the user explicitly starts a new consultation, so the
+        # download button doesn't vanish after a single render.
+
+        st.divider()
+
+        st.success("✅ Consultation saved successfully.")
+
+        pdf_path = st.session_state.saved_pdf_path
+
+        if pdf_path and Path(pdf_path).exists():
+
+            with open(pdf_path, "rb") as pdf:
+
+                st.download_button(
+                    "📄 Download PDF Report",
+                    pdf,
+                    file_name=Path(pdf_path).name,
+                    mime="application/pdf",
+                )
+
+        if st.button("🆕 Start New Consultation", type="primary"):
+
+            st.session_state.selected_symptoms = []
+            st.session_state.consultation_prediction = None
+            st.session_state.fusion_result = None
+            st.session_state.knowledge = None
+            st.session_state.ai_summary = None
+            st.session_state.voice_transcript = None
+            st.session_state.doctor_notes = ""
+            st.session_state.consultation_saved = False
+            st.session_state.saved_pdf_path = None
+
+            st.rerun()
+
+    elif prediction is not None:
 
         st.divider()
 
@@ -796,64 +863,6 @@ def show_consultation():
             )
 
         # ---------------------------------------------
-        # Consultation Summary
-        # ---------------------------------------------
-
-        summary = f"""
-        RURALCAREAI CONSULTATION REPORT
-
-        -----------------------------------------
-
-        Patient ID : {patient.patient_code}
-
-        Patient Name : {patient.full_name}
-
-        Age : {patient.age}
-
-        Gender : {patient.gender}
-
-        Village : {patient.village}
-
-        -----------------------------------------
-
-        Symptoms
-
-        {", ".join(s.replace("_"," ").title()
-
-        for s in st.session_state.selected_symptoms)}
-
-        -----------------------------------------
-
-        Predicted Disease
-
-        {predicted_disease}
-
-        Confidence
-
-        {confidence:.2f} %
-
-        Risk
-
-        {risk}
-
-        Recommendation
-
-        {fusion_result['recommendation']}
-
-        AI Clinical Summary
-
-        {ai_summary}
-
-        Doctor Notes
-
-        """
-
-        st.download_button(
-            "📄 Download Consultation Report",
-            summary,
-            file_name=f"{patient.patient_code}_consultation.txt",
-        )
-        # ---------------------------------------------
         # Doctor Notes
         # ---------------------------------------------
 
@@ -945,9 +954,6 @@ def show_consultation():
 
                 )
 
-                st.success(
-                    "✅ Consultation saved successfully."
-                )
                 reports_dir = Path("reports")
 
                 reports_dir.mkdir(exist_ok=True)
@@ -974,29 +980,10 @@ def show_consultation():
 
                 )
 
-                with open(pdf_file, "rb") as pdf:
-
-                    st.download_button(
-
-                        "📄 Download PDF Report",
-
-                        pdf,
-
-                        file_name=pdf_file.name,
-
-                        mime="application/pdf",
-
-                    )
+                st.session_state.consultation_saved = True
+                st.session_state.saved_pdf_path = str(pdf_file)
 
                 st.balloons()
-
-                st.session_state.consultation_prediction = None
-                st.session_state.fusion_result = None
-                st.session_state.knowledge = None
-                st.session_state.ai_summary = None
-                st.session_state.voice_transcript = None
-                st.session_state.selected_symptoms = []
-                st.session_state.doctor_notes = ""
 
                 st.rerun()
 

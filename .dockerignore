@@ -1,0 +1,17 @@
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.git/
+.idea/
+.claude/
+datasets/
+logs/
+reports/*.pdf
+uploads/
+notebooks/
+data/*.db
+data/chroma_db/
+node_modules/
+*.md
