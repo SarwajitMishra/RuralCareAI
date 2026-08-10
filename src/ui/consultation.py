@@ -726,46 +726,6 @@ def show_consultation():
         st.write("")
 
         # ---------------------------------------------
-        # Top Predictions
-        # ---------------------------------------------
-
-        st.subheader("📊 Top Predictions")
-
-        prediction_rows = []
-
-        for row in prediction["top_predictions"]:
-            prediction_rows.append(
-                {
-                    "Disease": row["disease"],
-                    "Confidence (%)": row["confidence"],
-                }
-            )
-
-        prediction_df = pd.DataFrame(
-            prediction_rows
-        )
-
-        st.dataframe(
-            prediction_df,
-            use_container_width=True,
-            hide_index=True,
-        )
-
-        st.divider()
-
-        # ---------------------------------------------
-        # Prediction Confidence
-        # ---------------------------------------------
-
-        st.subheader("🎯 Prediction Confidence")
-
-        st.progress(min(confidence / 100, 1.0))
-
-        st.caption(
-            f"The AI model is **{confidence:.2f}%** confident in its prediction."
-        )
-
-        # ---------------------------------------------
         # Risk Assessment
         # ---------------------------------------------
 
