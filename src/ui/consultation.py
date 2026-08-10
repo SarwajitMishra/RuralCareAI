@@ -88,19 +88,22 @@ DEFAULTS = {
 "other_history": "",
 }
 
-for key, value in DEFAULTS.items():
-
-    if key not in st.session_state:
-
-        st.session_state[key] = value
-
-
-
 # ---------------------------------------------------------
 # Main Screen
 # ---------------------------------------------------------
 
 def show_consultation():
+
+    # Runs on every call (i.e. every rerun, for every session) rather
+    # than at module level - module-level code only executes once per
+    # server process (the first time this module is imported), so a
+    # module-level init loop would leave session_state uninitialized
+    # for every session after the first.
+    for key, value in DEFAULTS.items():
+
+        if key not in st.session_state:
+
+            st.session_state[key] = value
 
     st.title("🩺 AI Consultation")
 
