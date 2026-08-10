@@ -102,15 +102,24 @@ def _humanize(symptom: str) -> str:
     return symptom.replace("_", " ").title()
 
 
-def _markdown_lite_to_reportlab(text: str) -> list[str]:
+# Matches a whole line that is JUST a numbered section heading, e.g.
+# "1. Clinical Summary", "1. **Clinical Summary**", "1.  Clinical Summary:"
+# - not a numbered sentence within a paragraph's body text.
+_SUMMARY_HEADING_RE = re.compile(r"^(\d+)\.\s*\**\s*(.+?)\s*\**:?\s*$")
+
+
+def _format_ai_summary(text: str, paragraph_style, heading_style) -> list:
     """
-    Convert the LLM's lightly-markdown-formatted output into a list of
-    ReportLab-safe paragraph strings: escapes XML-special characters,
-    converts **bold** into <b>bold</b>, and drops stray separator
-    lines (e.g. "***") the model sometimes emits.
+    Render the LLM's numbered-section clinical summary (e.g.
+    "1. Clinical Summary", "2. Possible Reasoning", ...) as a list of
+    ReportLab Paragraph flowables: section headings get a distinct
+    bold style, body text gets breathing room via spaceAfter, and
+    stray separator lines (e.g. "***") the model sometimes emits are
+    dropped. Packing every line into one plain style with no spacing
+    (the previous behaviour) reads as one dense, run-together block.
     """
 
-    paragraphs = []
+    flowables = []
 
     for raw_line in text.split("\n"):
         line = raw_line.strip()
@@ -118,12 +127,21 @@ def _markdown_lite_to_reportlab(text: str) -> list[str]:
         if not line or set(line) <= {"*", "-", "_"}:
             continue
 
-        line = _esc(line)
-        line = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", line)
+        heading_match = _SUMMARY_HEADING_RE.match(line)
 
-        paragraphs.append(line)
+        if heading_match and len(heading_match.group(2)) < 40:
+            number, label = heading_match.groups()
+            flowables.append(
+                Paragraph(f"{number}. {_esc(label)}", heading_style)
+            )
+            continue
 
-    return paragraphs
+        escaped = _esc(line)
+        escaped = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped)
+
+        flowables.append(Paragraph(escaped, paragraph_style))
+
+    return flowables
 
 
 def _styles():
@@ -144,6 +162,24 @@ def _styles():
         "body_hindi": ParagraphStyle(
             "BodyHindi", parent=base["Normal"], fontSize=9.5, leading=15,
             fontName=HINDI_FONT,
+        ),
+        "summary_paragraph": ParagraphStyle(
+            "SummaryParagraph", parent=base["Normal"], fontSize=9.5,
+            leading=14, spaceAfter=8,
+        ),
+        "summary_paragraph_hindi": ParagraphStyle(
+            "SummaryParagraphHindi", parent=base["Normal"], fontSize=9.5,
+            leading=16, spaceAfter=8, fontName=HINDI_FONT,
+        ),
+        "summary_heading": ParagraphStyle(
+            "SummaryHeading", parent=base["Normal"], fontSize=10.5,
+            leading=13, fontName="Helvetica-Bold", textColor=TEAL,
+            spaceBefore=10, spaceAfter=4,
+        ),
+        "summary_heading_hindi": ParagraphStyle(
+            "SummaryHeadingHindi", parent=base["Normal"], fontSize=10.5,
+            leading=15, fontName=HINDI_FONT, textColor=TEAL,
+            spaceBefore=10, spaceAfter=4,
         ),
         "bullet": ParagraphStyle(
             "Bullet", parent=base["Normal"], fontSize=9.5, leading=13.5,
@@ -318,24 +354,25 @@ class PDFGenerator:
 
         if explanation:
 
-            story.append(Paragraph("Why did the AI predict this? (SHAP)", styles["section"]))
+            story.append(Paragraph("Why This Diagnosis? (Symptom Influence)", styles["section"]))
             story.append(_section_rule(content_width))
             story.append(Spacer(1, 4))
             story.append(Paragraph(
-                "Contribution of each reported symptom toward the "
-                "symptom-based (text/voice) model's own prediction - "
-                "not the uploaded image, if any. Positive values push "
-                "toward that model's predicted disease; negative values "
-                "push away from it.",
+                "Each reported symptom below pushed the AI's decision "
+                "toward or away from the diagnosis above - a bigger "
+                "score means a bigger influence, so you can sanity-check "
+                "the prediction instead of treating it as a black box. "
+                "This reflects the reported symptoms only, not any "
+                "uploaded image.",
                 styles["muted"],
             ))
             story.append(Spacer(1, 6))
 
-            shap_rows = [["Symptom", "SHAP Value", "Impact"]]
+            shap_rows = [["Symptom", "Influence Score", "Effect"]]
 
             for row in explanation:
                 value = row["Importance"]
-                impact = "Increases risk" if value >= 0 else "Decreases risk"
+                impact = "Supports this diagnosis" if value >= 0 else "Points away from it"
                 shap_rows.append([
                     _humanize(row["Symptom"]),
                     f"{value:+.4f}",
@@ -344,7 +381,7 @@ class PDFGenerator:
 
             shap_table = Table(
                 shap_rows,
-                colWidths=[content_width * 0.4, content_width * 0.25, content_width * 0.35],
+                colWidths=[content_width * 0.35, content_width * 0.22, content_width * 0.43],
             )
 
             shap_style = [
@@ -438,16 +475,11 @@ class PDFGenerator:
             # Devanagari text needs the Nirmala font (Helvetica has no
             # glyphs for it, per HINDI_FONT above); Hinglish/English are
             # Roman script and render fine with the default body style.
-            summary_style = (
-                styles["body_hindi"]
-                if report_language == "Hindi" and HINDI_FONT != "Helvetica"
-                else styles["body"]
-            )
+            use_hindi_font = report_language == "Hindi" and HINDI_FONT != "Helvetica"
+            paragraph_style = styles["summary_paragraph_hindi"] if use_hindi_font else styles["summary_paragraph"]
+            heading_style = styles["summary_heading_hindi"] if use_hindi_font else styles["summary_heading"]
 
-            summary_body = [
-                Paragraph(line, summary_style)
-                for line in _markdown_lite_to_reportlab(ai_summary)
-            ]
+            summary_body = _format_ai_summary(ai_summary, paragraph_style, heading_style)
 
             summary_table = Table([[summary_body]], colWidths=[content_width])
             summary_table.setStyle(TableStyle([

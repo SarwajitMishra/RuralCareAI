@@ -703,13 +703,14 @@ def show_consultation():
                 f"at {fusion_result['image_confidence']:.2f}%)"
             )
 
-        st.subheader("🧠 Why did the AI predict this? (SHAP)")
+        st.subheader("🔍 Why This Diagnosis? (Symptom Influence)")
 
         st.caption(
-            "Per-prediction SHAP contribution of each selected symptom "
-            "toward the symptom-based model's predicted disease. "
-            "Positive values push toward the prediction, negative "
-            "values push away from it."
+            f"Each symptom you selected pushed the AI's decision toward "
+            f"or away from **{predicted_disease}** - a bigger score "
+            f"means a bigger influence, so you can sanity-check the "
+            f"prediction instead of treating it as a black box. This "
+            f"reflects the reported symptoms only, not any uploaded image."
         )
 
         explanation = disease_predictor.explain_prediction(
@@ -721,6 +722,11 @@ def show_consultation():
 
             explanation_df["Importance"] = explanation_df["Importance"].round(4)
 
+            explanation_df["Effect"] = explanation_df["Importance"].apply(
+                lambda value: "✅ Supports this diagnosis"
+                if value >= 0 else "⚠️ Points away from it"
+            )
+
             st.dataframe(
                 explanation_df,
                 use_container_width=True,
@@ -728,7 +734,7 @@ def show_consultation():
             )
 
             st.bar_chart(
-                explanation_df.set_index("Symptom")
+                explanation_df.set_index("Symptom")[["Importance"]]
             )
 
         # ---------------------------------------------
