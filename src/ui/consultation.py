@@ -82,7 +82,16 @@ DEFAULTS = {
     "selected_symptoms": [],
 
     "doctor_notes": "",
+
+    "report_language": "English",
 }
+
+# Hindi/Hinglish support exists end-to-end (prompt, PDF Devanagari
+# font), but gemma3:1b doesn't reliably honor the language instruction
+# on a prompt this long - tested output came back as Spanish, German,
+# and plain English across otherwise-identical runs. Restricted to
+# English until a more capable local model is available.
+REPORT_LANGUAGES = ["English"]
 
 # ---------------------------------------------------------
 # Main Screen
@@ -453,7 +462,13 @@ def show_consultation():
 
         default=st.session_state.selected_symptoms,
 
-        format_func=lambda x: x.replace("_", " ").title()
+        format_func=lambda x: x.replace("_", " ").title(),
+
+        # A real consultation realistically involves a handful of
+        # symptoms - this caps Streamlit's built-in "select all" (shown
+        # automatically for long option lists) from producing a
+        # nonsensical prediction off all 132 possible symptoms at once.
+        max_selections=15,
 
     )
 
@@ -464,6 +479,14 @@ def show_consultation():
         "or voice tab above, then add, remove, or correct any symptom "
         "before predicting - your edits here are what gets predicted on."
     )
+
+    # Only English is offered for now (see REPORT_LANGUAGES) - a
+    # single-option selector would just be clutter, so the language
+    # plumbing (llm_service prompt, PDF Devanagari font) stays wired
+    # up without a visible UI control until more languages are viable.
+    report_language = REPORT_LANGUAGES[0]
+
+    st.session_state.report_language = report_language
 
     st.divider()
 
@@ -538,6 +561,7 @@ def show_consultation():
                 machine_symptoms,
                 fusion_result,
                 knowledge,
+                language=report_language,
             )
 
         st.session_state.consultation_prediction = prediction
@@ -602,7 +626,30 @@ def show_consultation():
 
         st.divider()
 
-        st.subheader("🧠 AI Triage Result")
+        header_col, discard_col = st.columns([4, 1])
+
+        with header_col:
+
+            st.subheader("🧠 AI Triage Result")
+
+        with discard_col:
+
+            # Deliberately placed far from "Save Consultation" at the
+            # bottom of this section, rather than beside it, so a
+            # mis-click can't discard a completed diagnosis.
+            if st.button(
+                "🗑️ Discard & Restart",
+                use_container_width=True,
+            ):
+                st.session_state.selected_symptoms = []
+                st.session_state.consultation_prediction = None
+                st.session_state.fusion_result = None
+                st.session_state.knowledge = None
+                st.session_state.ai_summary = None
+                st.session_state.voice_transcript = None
+                st.session_state.doctor_notes = ""
+
+                st.rerun()
 
         confidence = fusion_result["confidence"]
         risk = fusion_result["risk_level"]
@@ -768,31 +815,11 @@ def show_consultation():
 
         st.session_state.doctor_notes = notes
 
-        left, right = st.columns([1, 4])
-
-        with left:
-
-            save = st.button(
-                "💾 Save Consultation",
-                type="primary",
-                use_container_width=True,
-            )
-
-        with right:
-
-            if st.button(
-                    "🧹 Clear",
-                    use_container_width=True,
-            ):
-                st.session_state.selected_symptoms = []
-                st.session_state.consultation_prediction = None
-                st.session_state.fusion_result = None
-                st.session_state.knowledge = None
-                st.session_state.ai_summary = None
-                st.session_state.voice_transcript = None
-                st.session_state.doctor_notes = ""
-
-                st.rerun()
+        save = st.button(
+            "💾 Save Consultation",
+            type="primary",
+            use_container_width=True,
+        )
 
         if save:
 
@@ -874,6 +901,8 @@ def show_consultation():
                     knowledge=knowledge,
 
                     ai_summary=ai_summary,
+
+                    report_language=st.session_state.report_language,
 
                 )
 

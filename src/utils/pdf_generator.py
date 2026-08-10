@@ -141,6 +141,10 @@ def _styles():
         "body": ParagraphStyle(
             "Body", parent=base["Normal"], fontSize=9.5, leading=13.5,
         ),
+        "body_hindi": ParagraphStyle(
+            "BodyHindi", parent=base["Normal"], fontSize=9.5, leading=15,
+            fontName=HINDI_FONT,
+        ),
         "bullet": ParagraphStyle(
             "Bullet", parent=base["Normal"], fontSize=9.5, leading=13.5,
             leftIndent=10, bulletIndent=0,
@@ -192,6 +196,7 @@ class PDFGenerator:
         explanation=None,
         knowledge=None,
         ai_summary=None,
+        report_language="English",
     ):
         styles = _styles()
         content_width = A4[0] - 2 * PAGE_MARGIN
@@ -430,8 +435,17 @@ class PDFGenerator:
             ))
             story.append(Spacer(1, 6))
 
+            # Devanagari text needs the Nirmala font (Helvetica has no
+            # glyphs for it, per HINDI_FONT above); Hinglish/English are
+            # Roman script and render fine with the default body style.
+            summary_style = (
+                styles["body_hindi"]
+                if report_language == "Hindi" and HINDI_FONT != "Helvetica"
+                else styles["body"]
+            )
+
             summary_body = [
-                Paragraph(line, styles["body"])
+                Paragraph(line, summary_style)
                 for line in _markdown_lite_to_reportlab(ai_summary)
             ]
 
