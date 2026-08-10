@@ -18,14 +18,20 @@ class FusionEngine:
     TEXT_WEIGHT = 0.70
     IMAGE_WEIGHT = 0.30
 
-    # Dermatological classes for which visual evidence is treated as
-    # more reliable than symptom text alone when the two disagree.
+    # Classes the skin-image CNN (trained on HAM10000) can actually
+    # output. Visual evidence is treated as more reliable than symptom
+    # text alone for these when the two disagree, since they are
+    # diagnoses a photograph can genuinely confirm/rule out and the
+    # text model's own symptom vocabulary has no equivalent labels for
+    # them. Must match models/image_class_mapping.json exactly.
     SKIN_DISEASES = {
-        "Fungal infection",
-        "Psoriasis",
-        "Impetigo",
-        "Chicken pox",
-        "Acne",
+        "Actinic_Keratosis",
+        "Basal_Cell_Carcinoma",
+        "Benign_Keratosis",
+        "Dermatofibroma",
+        "Melanocytic_Nevus",
+        "Melanoma",
+        "Vascular_Lesion",
     }
 
     # Minimum image confidence (%) required to override the text

@@ -82,17 +82,22 @@ class ImagePredictor:
 
     def _preprocess(self, image_path):
 
+        # The trained model's graph already has a
+        # mobilenet_v2.preprocess_input step baked in right after its
+        # Input layer (see train_image_model.py::create_model), matching
+        # how tf.keras.utils.image_dataset_from_directory feeds it raw
+        # [0, 255] pixels during training. Applying preprocess_input a
+        # second time here would rescale already-rescaled [-1, 1] values,
+        # collapsing every image into a near-identical narrow range and
+        # making the model effectively blind to the actual picture.
+
         image = Image.open(image_path)
 
         image = image.convert("RGB")
 
         image = image.resize(self.image_size)
 
-        image = np.array(image)
-
-        image = tf.keras.applications.mobilenet_v2.preprocess_input(
-            image
-        )
+        image = np.array(image, dtype=np.float32)
 
         image = np.expand_dims(
             image,
