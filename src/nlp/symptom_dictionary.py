@@ -101,7 +101,10 @@ class SymptomDictionary:
                 "body temperature",
                 "bukhar",
                 "tez bukhar",
-                "bahut bukhar"
+                "bahut bukhar",
+                "बुखार",
+                "तेज़ बुखार",
+                "तेज बुखार",
             ]
         )
 
@@ -112,7 +115,8 @@ class SymptomDictionary:
                 "slight fever",
                 "low fever",
                 "light fever",
-                "kam bukhar"
+                "kam bukhar",
+                "हल्का बुखार",
             ]
         )
 
@@ -124,7 +128,9 @@ class SymptomDictionary:
                 "wet cough",
                 "khansi",
                 "khaasi",
-                "lagatar khansi"
+                "lagatar khansi",
+                "खांसी",
+                "खाँसी",
             ]
         )
 
@@ -147,7 +153,9 @@ class SymptomDictionary:
                 "throwing up",
                 "puking",
                 "ulti",
-                "ulti ho rahi hai"
+                "ulti ho rahi hai",
+                "उल्टी",
+                "वमन",
             ]
         )
 
@@ -157,7 +165,9 @@ class SymptomDictionary:
                 "nausea",
                 "feeling sick",
                 "vomit feeling",
-                "jee machalna"
+                "jee machalna",
+                "जी मिचलाना",
+                "मतली",
             ]
         )
 
@@ -170,7 +180,9 @@ class SymptomDictionary:
                 "loose motions",
                 "motion problem",
                 "dast",
-                "baar baar motion"
+                "baar baar motion",
+                "दस्त",
+                "पतले दस्त",
             ]
         )
 
@@ -181,7 +193,9 @@ class SymptomDictionary:
                 "stomach ache",
                 "pet dard",
                 "pet me dard",
-                "pet dukh raha hai"
+                "pet dukh raha hai",
+                "पेट दर्द",
+                "पेट में दर्द",
             ]
         )
 
@@ -190,7 +204,9 @@ class SymptomDictionary:
             [
                 "abdominal pain",
                 "abdomen pain",
-                "pain in abdomen"
+                "pain in abdomen",
+                "pet ka dard",
+                "पेट का दर्द",
             ]
         )
 
@@ -198,7 +214,10 @@ class SymptomDictionary:
             "belly_pain",
             [
                 "belly pain",
-                "pain in belly"
+                "pain in belly",
+                "pet mein marod",
+                "marod utha",
+                "पेट में मरोड़",
             ]
         )
 
@@ -208,7 +227,9 @@ class SymptomDictionary:
                 "headache",
                 "head ache",
                 "sir dard",
-                "sar dard"
+                "sar dard",
+                "सिर दर्द",
+                "सर दर्द",
             ]
         )
 
@@ -217,7 +238,10 @@ class SymptomDictionary:
             [
                 "chest pain",
                 "pain in chest",
-                "seene me dard"
+                "seene me dard",
+                "seene mein dard",
+                "सीने में दर्द",
+                "छाती में दर्द",
             ]
         )
 
@@ -228,7 +252,9 @@ class SymptomDictionary:
                 "breathing difficulty",
                 "difficulty breathing",
                 "saans lene me dikkat",
-                "saans phoolna"
+                "saans phoolna",
+                "सांस लेने में तकलीफ",
+                "सांस फूलना",
             ]
         )
 
@@ -239,7 +265,9 @@ class SymptomDictionary:
                 "tired",
                 "weakness",
                 "thakan",
-                "kamjori"
+                "kamjori",
+                "कमजोरी",
+                "थकान",
             ]
         )
 
@@ -249,7 +277,8 @@ class SymptomDictionary:
                 "joint pain",
                 "pain in joints",
                 "ghutne dard",
-                "joint ache"
+                "joint ache",
+                "जोड़ों में दर्द",
             ]
         )
 
@@ -259,7 +288,9 @@ class SymptomDictionary:
                 "muscle pain",
                 "body pain",
                 "body ache",
-                "sharir dard"
+                "sharir dard",
+                "बदन दर्द",
+                "शरीर दर्द",
             ]
         )
 
@@ -268,7 +299,8 @@ class SymptomDictionary:
             [
                 "back pain",
                 "lower back pain",
-                "peeth dard"
+                "peeth dard",
+                "पीठ दर्द",
             ]
         )
 
@@ -278,7 +310,8 @@ class SymptomDictionary:
                 "burning urine",
                 "burning urination",
                 "pain while urinating",
-                "jalan peshab"
+                "jalan peshab",
+                "पेशाब में जलन",
             ]
         )
 
@@ -288,7 +321,9 @@ class SymptomDictionary:
                 "skin rash",
                 "rashes",
                 "red rash",
-                "chakate"
+                "chakate",
+                "त्वचा पर दाने",
+                "चकत्ते",
             ]
         )
 
@@ -297,7 +332,208 @@ class SymptomDictionary:
             [
                 "itching",
                 "itch",
-                "khujli"
+                "khujli",
+                "खुजली",
+            ]
+        )
+
+        # -----------------------------------------------------
+        # Additional symptoms needed for common rural-disease demo
+        # scenarios (Typhoid, Tuberculosis, Malaria, Jaundice, UTI) -
+        # English, Hinglish, and Hindi (Devanagari) coverage.
+        # -----------------------------------------------------
+
+        self._add(
+            "chills",
+            [
+                "chills",
+                "shivering",
+                "thand lagna",
+                "kaanpna",
+                "ठंड लगना",
+                "कंपकंपी",
+            ]
+        )
+
+        self._add(
+            "sweating",
+            [
+                "sweating",
+                "excessive sweating",
+                "pasina",
+                "pasina aana",
+                "पसीना",
+                "पसीना आना",
+            ]
+        )
+
+        self._add(
+            "dehydration",
+            [
+                "dehydration",
+                "dehydrated",
+                "paani ki kami",
+                "पानी की कमी",
+                "निर्जलीकरण",
+            ]
+        )
+
+        self._add(
+            "constipation",
+            [
+                "constipation",
+                "kabj",
+                "kabz",
+                "कब्ज",
+            ]
+        )
+
+        self._add(
+            "weight_loss",
+            [
+                "weight loss",
+                "losing weight",
+                "wazan kam hona",
+                "wazan ghatna",
+                "वजन कम होना",
+                "वजन घटना",
+            ]
+        )
+
+        self._add(
+            "loss_of_appetite",
+            [
+                "loss of appetite",
+                "no appetite",
+                "not feeling hungry",
+                "bhookh na lagna",
+                "bhookh kam hona",
+                "भूख न लगना",
+                "भूख कम होना",
+            ]
+        )
+
+        self._add(
+            "blood_in_sputum",
+            [
+                "blood in sputum",
+                "blood in phlegm",
+                "coughing blood",
+                "cough with blood",
+                "khoon wali khansi",
+                "khansi me khoon",
+                "balgam me khoon",
+                "खांसी में खून",
+                "बलगम में खून",
+            ]
+        )
+
+        self._add(
+            "nodal_skin_eruptions",
+            [
+                "skin eruptions",
+                "nodal eruptions",
+                "twacha par ubhar",
+                "त्वचा पर गांठ",
+                "त्वचा में उभार",
+            ]
+        )
+
+        self._add(
+            "dischromic _patches",
+            [
+                "discoloured patches",
+                "discolored patches",
+                "patches on skin",
+                "rang badalna",
+                "रंगीन धब्बे",
+                "त्वचा का रंग बदलना",
+            ]
+        )
+
+        self._add(
+            "yellowish_skin",
+            [
+                "yellow skin",
+                "yellowish skin",
+                "peeli twacha",
+                "त्वचा पीली होना",
+                "पीली त्वचा",
+            ]
+        )
+
+        self._add(
+            "dark_urine",
+            [
+                "dark urine",
+                "urine dark",
+                "gehra peshab",
+                "पेशाब का रंग गहरा",
+                "गहरे रंग का पेशाब",
+            ]
+        )
+
+        self._add(
+            "bladder_discomfort",
+            [
+                "bladder discomfort",
+                "bladder pain",
+                "मूत्राशय में परेशानी",
+            ]
+        )
+
+        self._add(
+            "foul_smell_of urine",
+            [
+                "foul smell of urine",
+                "smelly urine",
+                "peshab me badbu",
+                "पेशाब से बदबू",
+            ]
+        )
+
+        self._add(
+            "swelled_lymph_nodes",
+            [
+                "swollen lymph nodes",
+                "swelled glands",
+                "gaanth sujna",
+                "granthi sujna",
+                "गांठें सूजना",
+                "गर्दन में सूजन",
+            ]
+        )
+
+        self._add(
+            "malaise",
+            [
+                "malaise",
+                "general weakness",
+                "sustee",
+                "susti",
+                "बेचैनी",
+                "अस्वस्थता",
+            ]
+        )
+
+        self._add(
+            "phlegm",
+            [
+                "phlegm",
+                "mucus",
+                "kaff",
+                "कफ",
+            ]
+        )
+
+        self._add(
+            "yellowing_of_eyes",
+            [
+                "yellowing of eyes",
+                "yellow eyes",
+                "aankhon ka peela hona",
+                "आँखों का पीला होना",
+                "आंखों का पीलापन",
             ]
         )
 
