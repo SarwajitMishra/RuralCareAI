@@ -818,6 +818,137 @@ DISEASE_KNOWLEDGE = {
             "Skin ulceration or bleeding from the vein",
         ],
     },
+
+    # ----------------------------------------------------------
+    # Skin-image (CNN) classes - HAM10000 dermatological lesion
+    # types. Keys must match models/image_class_mapping.json
+    # exactly, so the fusion engine's image-override path (see
+    # src/ml/fusion_engine.py) resolves to a real, matching entry
+    # instead of falling through to an unrelated ChromaDB semantic
+    # match when the predicted disease is an image-only class.
+    # ----------------------------------------------------------
+
+    "Actinic_Keratosis": {
+        "hindi": "एक्टिनिक केराटोसिस",
+        "description": "A rough, scaly patch on sun-exposed skin caused by years of UV exposure; considered a precancerous lesion.",
+        "risk": 55,
+        "precautions": [
+            "Avoid direct sun exposure, especially during peak hours",
+            "Use broad-spectrum sunscreen and wear protective clothing",
+            "Do not scratch, pick, or attempt to remove the patch",
+        ],
+        "first_aid": [
+            "Protect the affected area from further sun exposure",
+        ],
+        "when_to_consult": "For any new, rough, or scaly patch on sun-exposed skin - a dermatologist should evaluate it to rule out progression.",
+        "emergency_signs": [
+            "Rapid growth, bleeding, or ulceration of the patch",
+        ],
+    },
+
+    "Basal_Cell_Carcinoma": {
+        "hindi": "बेसल सेल कार्सिनोमा",
+        "description": "The most common type of skin cancer - slow-growing and rarely spreads internally, but locally destructive if left untreated.",
+        "risk": 70,
+        "precautions": [
+            "Use sun protection and avoid prolonged direct sun exposure",
+            "Perform regular skin self-examinations",
+            "Avoid trauma or scratching of the lesion",
+        ],
+        "first_aid": [
+            "Keep the area clean and protected from further sun exposure",
+        ],
+        "when_to_consult": "Promptly, for any new pearly or waxy bump, or a sore that does not heal or bleeds easily.",
+        "emergency_signs": [
+            "Rapid growth, significant bleeding, or signs of spreading infection",
+        ],
+    },
+
+    "Benign_Keratosis": {
+        "hindi": "बिनाइन केराटोसिस",
+        "description": "A common, non-cancerous skin growth (such as a seborrheic keratosis) that can sometimes resemble a cancerous lesion.",
+        "risk": 15,
+        "precautions": [
+            "Monitor the growth for changes in size, color, or shape",
+            "Avoid picking, scratching, or irritating the area",
+        ],
+        "first_aid": [
+            "Keep the area clean and dry",
+        ],
+        "when_to_consult": "If the growth changes rapidly, becomes painful, bleeds, or looks different from surrounding moles.",
+        "emergency_signs": [
+            "Rapid change in appearance, bleeding, or ulceration",
+        ],
+    },
+
+    "Dermatofibroma": {
+        "hindi": "डर्मेटोफाइब्रोमा",
+        "description": "A benign, firm skin nodule (often on the legs) that is harmless but can occasionally be itchy or tender.",
+        "risk": 10,
+        "precautions": [
+            "Avoid trauma or repeated friction to the area",
+            "Do not attempt to remove the nodule at home",
+        ],
+        "first_aid": [
+            "Keep the area clean; avoid scratching",
+        ],
+        "when_to_consult": "If the nodule grows rapidly, becomes painful, or changes color or shape.",
+        "emergency_signs": [
+            "Rapid growth, ulceration, or bleeding",
+        ],
+    },
+
+    "Melanocytic_Nevus": {
+        "hindi": "तिल (मेलानोसाइटिक नीवस)",
+        "description": "A common mole, usually benign, but should be monitored for changes that could indicate melanoma risk.",
+        "risk": 20,
+        "precautions": [
+            "Use sun protection and avoid excessive sun exposure",
+            "Self-examine moles periodically using the ABCDE rule (Asymmetry, Border, Color, Diameter, Evolving)",
+        ],
+        "first_aid": [
+            "No first aid needed for a stable, unchanged mole",
+        ],
+        "when_to_consult": "If the mole changes in size, shape, or color, becomes itchy, or bleeds.",
+        "emergency_signs": [
+            "Rapid change in mole appearance, new bleeding, or ulceration",
+        ],
+    },
+
+    "Melanoma": {
+        "hindi": "मेलानोमा",
+        "description": "The most dangerous form of skin cancer; can spread rapidly to other organs if not detected and treated early.",
+        "risk": 90,
+        "precautions": [
+            "Use sun protection and avoid tanning beds",
+            "Perform regular skin checks using the ABCDE rule",
+            "Seek prompt evaluation of any suspicious mole or lesion",
+        ],
+        "first_aid": [
+            "No first aid applicable at home; avoid further sun exposure to the area",
+        ],
+        "when_to_consult": "Urgently - any suspicious mole or lesion with ABCDE warning features needs immediate dermatologist evaluation.",
+        "emergency_signs": [
+            "Rapid growth, bleeding, ulceration, satellite lesions, or swollen nearby lymph nodes",
+        ],
+    },
+
+    "Vascular_Lesion": {
+        "hindi": "वैस्कुलर लीजन",
+        "description": "An abnormality of blood vessels in or under the skin (such as a hemangioma or cherry angioma), usually benign.",
+        "risk": 15,
+        "precautions": [
+            "Protect the lesion from trauma or injury that could cause bleeding",
+            "Monitor for changes in size or appearance",
+        ],
+        "first_aid": [
+            "Apply gentle pressure if the lesion bleeds from a minor injury",
+        ],
+        "when_to_consult": "If the lesion grows rapidly, bleeds frequently, or becomes cosmetically or functionally concerning.",
+        "emergency_signs": [
+            "Uncontrolled bleeding, rapid growth, or signs of infection",
+        ],
+    },
 }
 
 DEFAULT_KNOWLEDGE = {

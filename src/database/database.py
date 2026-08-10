@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
-from src.database.models import Base, Consultation
+from src.database.models import Base, Consultation, Patient
 
 
 # ------------------------------------------------------------------
@@ -83,8 +83,14 @@ def _migrate_schema():
 
     inspector = inspect(engine)
 
-    if "consultations" not in inspector.get_table_names():
-        return
+    if "consultations" in inspector.get_table_names():
+        _migrate_consultations_table(inspector)
+
+    if "patients" in inspector.get_table_names():
+        _migrate_patients_table(inspector)
+
+
+def _migrate_consultations_table(inspector):
 
     existing_columns = {
         column["name"] for column in inspector.get_columns("consultations")
@@ -115,6 +121,43 @@ def _migrate_schema():
     else:
         raise RuntimeError(
             "The 'consultations' table schema is out of date "
+            f"(missing columns: {sorted(missing_columns)}) and already "
+            "contains data, so it cannot be rebuilt automatically. "
+            "A manual migration is required."
+        )
+
+
+def _migrate_patients_table(inspector):
+
+    existing_columns = {
+        column["name"] for column in inspector.get_columns("patients")
+    }
+
+    expected_columns = {column.name for column in Patient.__table__.columns}
+
+    missing_columns = expected_columns - existing_columns
+
+    if not missing_columns:
+        return
+
+    if missing_columns == {"chronic_conditions"}:
+        with engine.begin() as connection:
+            connection.execute(
+                text("ALTER TABLE patients ADD COLUMN chronic_conditions VARCHAR(500)")
+            )
+        return
+
+    with engine.connect() as connection:
+        row_count = connection.execute(
+            text("SELECT COUNT(*) FROM patients")
+        ).scalar()
+
+    if row_count == 0:
+        Patient.__table__.drop(bind=engine)
+        Patient.__table__.create(bind=engine)
+    else:
+        raise RuntimeError(
+            "The 'patients' table schema is out of date "
             f"(missing columns: {sorted(missing_columns)}) and already "
             "contains data, so it cannot be rebuilt automatically. "
             "A manual migration is required."

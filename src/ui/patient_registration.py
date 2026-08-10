@@ -28,6 +28,18 @@ GENDERS = [
     "Other",
 ]
 
+CHRONIC_CONDITIONS = [
+    "Diabetes",
+    "Hypertension",
+    "Thyroid Disorder",
+    "Asthma",
+    "Heart Disease",
+    "Kidney Disease",
+    "Liver Disease",
+    "Tuberculosis",
+    "Cancer",
+]
+
 
 def _is_valid_email(email: str) -> bool:
     if not email:
@@ -126,9 +138,19 @@ def show_patient_registration():
                 value=70,
             )
 
+        st.divider()
+
+        st.subheader("Medical History")
+
+        chronic_conditions = st.multiselect(
+            "Known Chronic Conditions",
+            CHRONIC_CONDITIONS,
+        )
+
         remarks = st.text_area(
-            "Remarks",
+            "Other Medical History / Remarks (Optional)",
             height=120,
+            placeholder="Example: Epilepsy, COPD, Previous Stroke, known allergies, etc.",
         )
 
         st.divider()
@@ -194,6 +216,8 @@ def show_patient_registration():
             date_of_registration=date.today(),
 
             remarks=remarks.strip(),
+
+            chronic_conditions=", ".join(chronic_conditions) if chronic_conditions else None,
         )
 
         st.success("✅ Patient registered successfully.")

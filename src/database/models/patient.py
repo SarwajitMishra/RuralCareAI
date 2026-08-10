@@ -99,6 +99,11 @@ class Patient(Base, TimestampMixin):
         nullable=True,
     )
 
+    chronic_conditions: Mapped[str] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
     consultations = relationship(
         "Consultation",
         back_populates="patient",

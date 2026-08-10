@@ -82,10 +82,6 @@ DEFAULTS = {
     "selected_symptoms": [],
 
     "doctor_notes": "",
-
-"medical_history": [],
-
-"other_history": "",
 }
 
 # ---------------------------------------------------------
@@ -160,186 +156,168 @@ def show_consultation():
 
     # -------------------------------------------------
     # Patient Information
+    #
+    # Collapsed by default and bound to the selected patient's name -
+    # click to expand for the full record instead of it always taking
+    # up screen space. Chronic conditions and other medical history are
+    # captured once at Patient Registration (not re-entered here); they
+    # still feed the risk assessment below via patient.chronic_conditions
+    # / patient.remarks.
     # -------------------------------------------------
 
-    st.subheader("📋 Patient Details")
+    with st.expander(f"📋 Patient Details — {patient.full_name}"):
 
-    col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-    with col1:
+        with col1:
 
-        st.text_input(
+            st.text_input(
 
-            "Patient ID",
+                "Patient ID",
 
-            patient.patient_code,
+                patient.patient_code,
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-        st.text_input(
+            st.text_input(
 
-            "Full Name",
+                "Full Name",
 
-            patient.full_name,
+                patient.full_name,
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-        st.text_input(
+            st.text_input(
 
-            "Gender",
+                "Gender",
 
-            patient.gender,
+                patient.gender,
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-        st.text_input(
+            st.text_input(
 
-            "Blood Group",
+                "Blood Group",
 
-            patient.blood_group or "",
+                patient.blood_group or "",
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-        st.text_input(
+            st.text_input(
 
-            "Mobile",
+                "Mobile",
 
-            patient.mobile_number or "",
+                patient.mobile_number or "",
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-    with col2:
+        with col2:
 
-        st.text_input(
+            st.text_input(
 
-            "Age",
+                "Age",
 
-            str(patient.age),
+                str(patient.age),
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-        st.text_input(
+            st.text_input(
 
-            "Village",
+                "Village",
 
-            patient.village or "",
+                patient.village or "",
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-        st.text_input(
+            st.text_input(
 
-            "District",
+                "District",
 
-            patient.district or "",
+                patient.district or "",
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-        st.text_input(
+            st.text_input(
 
-            "State",
+                "State",
 
-            patient.state or "",
+                patient.state or "",
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
 
-        st.text_input(
+            st.text_input(
 
-            "Weight (kg)",
+                "Weight (kg)",
 
-            str(patient.weight_kg or ""),
+                str(patient.weight_kg or ""),
 
-            disabled=True,
+                disabled=True,
 
-        )
+            )
+
+        st.markdown("**Known Chronic Conditions**")
+
+        st.write(patient.chronic_conditions or "None recorded")
+
+        st.markdown("**Other Medical History / Remarks**")
+
+        st.write(patient.remarks or "None recorded")
+
+    medical_history = (
+        [c.strip() for c in patient.chronic_conditions.split(",") if c.strip()]
+        if patient.chronic_conditions else []
+    )
+
+    other_history = patient.remarks or ""
 
     st.divider()
 
     # -------------------------------------------------
-    # Past Medical History
-    # -------------------------------------------------
-
-    st.subheader("📋 Existing Medical Conditions")
-
-    history_options = [
-
-        "Diabetes",
-        "Hypertension",
-        "Thyroid Disorder",
-        "Asthma",
-        "Heart Disease",
-        "Kidney Disease",
-        "Liver Disease",
-        "Tuberculosis",
-        "Cancer"
-
-    ]
-
-    medical_history = st.multiselect(
-
-        "Known Chronic Conditions",
-
-        history_options,
-
-    )
-
-    other_history = st.text_input(
-
-        "Other Medical History (Optional)",
-
-        placeholder="Example: Epilepsy, COPD, Previous Stroke"
-
-    )
-
-    st.session_state.medical_history = medical_history
-
-    st.session_state.other_history = other_history
-    # -------------------------------------------------
     # Multimodal Symptom Input (Text / Voice / Image)
     #
-    # All three modalities live in one unified block, matching the
-    # architecture diagram's parallel-input framing, instead of three
-    # separate full-width sections. Tabs don't create a separate
-    # Python scope, so user_input / voice_file / uploaded_image /
-    # image_prediction are set exactly as before - just presented
-    # more compactly.
+    # All three modalities sit side by side in one row, matching the
+    # architecture diagram's parallel-input framing, rather than being
+    # tucked behind tabs. Columns don't create a separate Python scope,
+    # so user_input / image_prediction are set exactly as before - just
+    # presented as parallel panels instead of switchable tabs.
     # -------------------------------------------------
 
     st.subheader("🤒 Patient Symptoms & Media")
 
     st.caption(
-        "Provide symptoms via text or voice, and optionally upload a "
-        "skin image - combine as many modalities as apply."
+        "Provide symptoms via text, voice, and/or a skin image - all "
+        "three feed the same prediction, so combine as many as apply."
     )
 
-    tab_text, tab_voice, tab_image = st.tabs(
-        ["📝 Text", "🎤 Voice (Optional)", "📷 Skin Image (Optional)"]
-    )
+    col_text, col_voice, col_image = st.columns([2, 1, 1])
 
-    with tab_text:
+    with col_text:
+
+        st.markdown("**📝 Text**")
 
         user_input = st.text_area(
 
             "Describe the patient's symptoms",
 
-            height=120,
+            height=200,
 
             placeholder="""
     Examples:
@@ -355,21 +333,38 @@ def show_consultation():
 
         )
 
-    with tab_voice:
+    with col_voice:
 
-        st.caption("Record symptoms with the microphone, as an alternative to typing.")
+        st.markdown("**🎤 Voice (Optional)**")
+
+        st.caption("Record live with the mic, as an alternative to typing.")
 
         voice_file = st.audio_input("Record symptoms")
 
-        if voice_file:
+        with st.expander("Or upload an audio file"):
+
+            uploaded_audio = st.file_uploader(
+                "Upload audio",
+                type=["wav", "mp3", "m4a", "ogg"],
+                label_visibility="collapsed",
+            )
+
+        audio_source = voice_file or uploaded_audio
+
+        if audio_source:
+
+            suffix = Path(
+                getattr(audio_source, "name", "recording.wav")
+            ).suffix or ".wav"
+
             with tempfile.NamedTemporaryFile(
 
                     delete=False,
 
-                    suffix=".wav"
+                    suffix=suffix
 
             ) as tmp:
-                tmp.write(voice_file.read())
+                tmp.write(audio_source.read())
 
                 audio_path = tmp.name
 
@@ -384,7 +379,7 @@ def show_consultation():
 
                 value=voice_result["transcript"],
 
-                height=120,
+                height=100,
 
                 disabled=True,
 
@@ -396,11 +391,14 @@ def show_consultation():
 
             st.session_state.voice_transcript = voice_result["transcript"]
 
-    with tab_image:
+    with col_image:
+
+        st.markdown("**📷 Skin Image (Optional)**")
 
         uploaded_image = st.file_uploader(
             "Upload Skin Lesion",
             type=["jpg", "jpeg", "png"],
+            label_visibility="collapsed",
         )
 
         image_prediction = None
@@ -410,7 +408,7 @@ def show_consultation():
             st.image(
                 uploaded_image,
                 caption="Uploaded Image",
-                width=300,
+                use_container_width=True,
             )
 
             with st.spinner("Analyzing image..."):
@@ -420,11 +418,11 @@ def show_consultation():
                     image_prediction = image_service.predict(uploaded_image)
 
                     st.success(
-                        f"Image Prediction: {image_prediction['prediction']}"
+                        f"Prediction: {image_prediction['prediction']}"
                     )
 
                     st.metric(
-                        "Image Confidence",
+                        "Confidence",
                         f"{image_prediction['confidence'] * 100:.2f}%"
                     )
 
@@ -725,59 +723,6 @@ def show_consultation():
 
         st.info(ai_summary)
 
-        # ---------------------------------------------
-        # Triage Card
-        # ---------------------------------------------
-
-        st.markdown(
-            f"""
-    <div style="
-    padding:20px;
-    border-radius:12px;
-    border:2px solid #4CAF50;
-    background-color:#F8FFF8;
-    ">
-
-    <h3>🏥 AI TRIAGE REPORT</h3>
-
-    <b>Patient</b><br>
-    {patient.full_name}
-
-    <br><br>
-
-    <b>Medical History</b><br>
-    {", ".join(medical_history) if medical_history else "None"}
-
-    <br><br>
-
-    <b>Other</b><br>
-    {other_history}
-
-    <br><br>
-
-    <b>Predicted Disease</b><br>
-    {predicted_disease}
-
-    <br><br>
-
-    <b>Confidence</b><br>
-    {confidence:.2f} %
-
-    <br><br>
-
-    <b>Risk Level</b><br>
-    {risk_color} {risk}
-
-    <br><br>
-
-    <b>Recommendation</b><br>
-    {fusion_result['recommendation']}
-
-    </div>
-    """,
-            unsafe_allow_html=True,
-        )
-
         st.write("")
 
         # ---------------------------------------------
@@ -849,23 +794,6 @@ def show_consultation():
             )
 
         # ---------------------------------------------
-        # Selected Symptoms
-        # ---------------------------------------------
-
-        st.subheader("🩺 Selected Symptoms")
-
-        cols = st.columns(3)
-
-        for index, symptom in enumerate(
-                st.session_state.selected_symptoms
-        ):
-            cols[index % 3].success(
-
-                symptom.replace("_", " ").title()
-
-            )
-
-        # ---------------------------------------------
         # Doctor Notes
         # ---------------------------------------------
 
@@ -910,8 +838,14 @@ def show_consultation():
 
             try:
 
+                # The saved record (DB + PDF) must reflect the FINAL
+                # fused disease/confidence, not the text-only model's -
+                # they can differ whenever the image model overrides the
+                # text prediction (see fusion_engine.py).
                 save_prediction_result = {
                     **prediction,
+                    "predicted_disease": fusion_result["predicted_disease"],
+                    "confidence": fusion_result["confidence"],
                     "risk_level": fusion_result["risk_level"],
                     "recommendation": fusion_result["recommendation"],
                 }

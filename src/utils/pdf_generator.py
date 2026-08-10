@@ -317,8 +317,11 @@ class PDFGenerator:
             story.append(_section_rule(content_width))
             story.append(Spacer(1, 4))
             story.append(Paragraph(
-                "Positive values push toward the predicted disease; "
-                "negative values push away from it.",
+                "Contribution of each reported symptom toward the "
+                "symptom-based (text/voice) model's own prediction - "
+                "not the uploaded image, if any. Positive values push "
+                "toward that model's predicted disease; negative values "
+                "push away from it.",
                 styles["muted"],
             ))
             story.append(Spacer(1, 6))
