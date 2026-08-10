@@ -16,6 +16,7 @@ Author: Sarwajit Kumar Mishra
 from __future__ import annotations
 
 import os
+import re
 
 import requests
 
@@ -86,7 +87,12 @@ class LLMService:
 
             data = response.json()
 
-            return self._strip_meta_commentary(data["response"].strip())
+            report = data["response"].strip()
+            report = self._isolate_final_report(report)
+            report = self._renumber_sections(report)
+            report = self._strip_meta_commentary(report)
+
+            return report
 
         except requests.exceptions.ConnectionError:
             return (
@@ -101,6 +107,79 @@ class LLMService:
     # -----------------------------------------------------
     # Output cleanup
     # -----------------------------------------------------
+
+    _SECTION_LABELS = (
+        "Clinical Summary",
+        "Possible Reasoning",
+        "Immediate Advice",
+        "Home Care",
+        "Red Flag Symptoms",
+        "Referral Recommendation",
+    )
+
+    @staticmethod
+    def _label_regex(label: str) -> str:
+        # Small models sometimes drop the space between words in a
+        # heading (e.g. "ImmediateAdvice", "ReferralRecommendation");
+        # matching word-by-word with an optional gap catches both.
+        return r"\s*".join(re.escape(word) for word in label.split())
+
+    @classmethod
+    def _isolate_final_report(cls, text: str) -> str:
+        """
+        Small local models sometimes echo the six section headings
+        twice: once as a bare outline with no content (or with a
+        chatty "here's a draft" preamble tacked onto the last line),
+        then again with the real content - continuing the numbering
+        from where the outline left off (e.g. "7. Clinical Summary")
+        instead of restarting at 1. If the first section's heading
+        appears more than once, keep only from its LAST occurrence
+        onward, discarding whatever duplicate preamble precedes it.
+        """
+
+        pattern = re.compile(
+            r"^\s*\d+\.\s*\**\s*" + cls._label_regex(cls._SECTION_LABELS[0])
+            + r"\s*\**:?\s*$",
+            re.IGNORECASE | re.MULTILINE,
+        )
+
+        matches = list(pattern.finditer(text))
+
+        if len(matches) > 1:
+            text = text[matches[-1].start():]
+
+        return text
+
+    @classmethod
+    def _renumber_sections(cls, text: str) -> str:
+        """
+        Force canonical "1. Clinical Summary" ... "6. Referral
+        Recommendation" numbering on whichever six heading lines
+        appear, in order, regardless of what numbers or spacing the
+        model produced - a defensive backstop after _isolate_final_report
+        may have left content starting at "7." instead of "1.".
+        """
+
+        lines = text.split("\n")
+        next_label = 0
+
+        for i, line in enumerate(lines):
+
+            if next_label >= len(cls._SECTION_LABELS):
+                break
+
+            label = cls._SECTION_LABELS[next_label]
+
+            heading_re = re.compile(
+                r"^\s*\d+\.\s*\**\s*" + cls._label_regex(label) + r"\s*\**:?\s*$",
+                re.IGNORECASE,
+            )
+
+            if heading_re.match(line.strip()):
+                lines[i] = f"{next_label + 1}. {label}"
+                next_label += 1
+
+        return "\n".join(lines)
 
     _META_COMMENTARY_MARKERS = (
         "i've", "i have", "let me know", "please let me know",
@@ -229,6 +308,10 @@ Output ONLY the six numbered sections above, in a professional
 clinical tone. Do not add any introduction, sign-off, meta-commentary
 about these instructions, or offer to revise the report - the response
 begins directly with "1. Clinical Summary" and ends after section 6.
+Write each heading exactly ONCE, followed immediately by its content -
+do not list the six headings as a bare outline before writing them
+again with content, and do not restart or continue the numbering a
+second time.
 
 Reminder - {language_instruction}
 """
