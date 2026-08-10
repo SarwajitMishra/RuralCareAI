@@ -779,34 +779,6 @@ def show_consultation():
         st.write("")
 
         # ---------------------------------------------
-        # Risk Assessment
-        # ---------------------------------------------
-
-        if risk == "Critical":
-
-            st.error(
-                "🚨 CRITICAL RISK\n\nImmediate emergency medical attention is recommended."
-            )
-
-        elif risk == "High":
-
-            st.warning(
-                "⚠️ HIGH RISK\n\nRefer the patient to the nearest physician or hospital."
-            )
-
-        elif risk == "Medium":
-
-            st.info(
-                "🟡 MEDIUM RISK\n\nClinical evaluation and follow-up are recommended."
-            )
-
-        else:
-
-            st.success(
-                "🟢 LOW RISK\n\nHome care and routine monitoring are recommended."
-            )
-
-        # ---------------------------------------------
         # Doctor Notes
         # ---------------------------------------------
 
