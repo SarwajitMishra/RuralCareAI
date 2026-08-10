@@ -93,6 +93,13 @@ DEFAULTS = {
 # English until a more capable local model is available.
 REPORT_LANGUAGES = ["English"]
 
+# Below this, the Random Forest has too little signal to distinguish
+# between 41 diseases and can latch onto a rare, misleading match -
+# e.g. "High Fever" alone predicts AIDS at ~32% confidence. Verified
+# directly: 1-2 symptoms consistently produced nonsensical predictions
+# in testing; 3 was the smallest count that gave sane results.
+MIN_SYMPTOMS_FOR_PREDICTION = 3
+
 # ---------------------------------------------------------
 # Main Screen
 # ---------------------------------------------------------
@@ -477,7 +484,11 @@ def show_consultation():
     st.caption(
         "Click **Extract Symptoms** to auto-fill this list from the text "
         "or voice tab above, then add, remove, or correct any symptom "
-        "before predicting - your edits here are what gets predicted on."
+        "before predicting - your edits here are what gets predicted on. "
+        f"At least **{MIN_SYMPTOMS_FOR_PREDICTION} symptoms** are required: "
+        "on too little signal the model falls back to whichever rare "
+        "disease that single symptom happens to correlate with in the "
+        "training data, which is not a meaningful prediction."
     )
 
     # Only English is offered for now (see REPORT_LANGUAGES) - a
@@ -512,11 +523,16 @@ def show_consultation():
 
         selected_symptoms = st.session_state.selected_symptoms
 
-        if len(selected_symptoms) == 0:
+        if len(selected_symptoms) < MIN_SYMPTOMS_FOR_PREDICTION:
 
             st.error(
-                "Please click 'Extract Symptoms from Text / Voice' first, "
-                "or select at least one symptom manually."
+                f"Please select at least {MIN_SYMPTOMS_FOR_PREDICTION} "
+                "symptoms before predicting. With only one or two, the "
+                "model has almost nothing to distinguish between "
+                "diseases and can latch onto a rare, misleading match - "
+                "e.g. \"High Fever\" alone predicts AIDS at ~32% "
+                "confidence, which is not a real signal. Click 'Extract "
+                "Symptoms from Text / Voice' first, or add more manually."
             )
 
             return
