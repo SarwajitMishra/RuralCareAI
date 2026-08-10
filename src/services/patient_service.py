@@ -47,6 +47,28 @@ class PatientService:
             session.close()
 
     @staticmethod
+    def update_patient(patient_id, **kwargs):
+
+        session = get_session()
+
+        try:
+
+            patient = session.get(Patient, patient_id)
+
+            for key, value in kwargs.items():
+                setattr(patient, key, value)
+
+            session.commit()
+
+            session.refresh(patient)
+
+            return patient
+
+        finally:
+
+            session.close()
+
+    @staticmethod
     def get_all_patients():
 
         session = get_session()

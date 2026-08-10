@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from src.services.patient_service import PatientService
+from src.ui.patient_registration import BLOOD_GROUPS, CHRONIC_CONDITIONS, GENDERS
 
 
 def show_patient_list():
@@ -83,75 +84,156 @@ def show_patient_list():
         p for p in patients if p.patient_code == selected_patient
     )
 
-    c1, c2 = st.columns(2)
+    # Widget keys are tied to patient.id so switching the selected
+    # patient always shows that patient's own values, instead of
+    # Streamlit retaining stale input from whichever patient was
+    # edited previously (widgets are keyed by identity, not by the
+    # `value=`/default passed to them).
 
-    with c1:
+    with st.form(f"edit_patient_form_{patient.id}"):
 
-        st.text_input(
-            "Patient ID",
-            patient.patient_code,
-            disabled=True,
+        c1, c2 = st.columns(2)
+
+        with c1:
+
+            st.text_input(
+                "Patient ID",
+                patient.patient_code,
+                disabled=True,
+            )
+
+            full_name = st.text_input(
+                "Name",
+                patient.full_name,
+                key=f"edit_name_{patient.id}",
+            )
+
+            gender = st.selectbox(
+                "Gender",
+                GENDERS,
+                index=GENDERS.index(patient.gender) if patient.gender in GENDERS else 0,
+                key=f"edit_gender_{patient.id}",
+            )
+
+            blood_group = st.selectbox(
+                "Blood Group",
+                BLOOD_GROUPS,
+                index=BLOOD_GROUPS.index(patient.blood_group) if patient.blood_group in BLOOD_GROUPS else 0,
+                key=f"edit_blood_group_{patient.id}",
+            )
+
+            mobile = st.text_input(
+                "Mobile",
+                patient.mobile_number or "",
+                key=f"edit_mobile_{patient.id}",
+            )
+
+        with c2:
+
+            age = st.number_input(
+                "Age",
+                min_value=0,
+                max_value=120,
+                value=patient.age,
+                key=f"edit_age_{patient.id}",
+            )
+
+            village = st.text_input(
+                "Village",
+                patient.village or "",
+                key=f"edit_village_{patient.id}",
+            )
+
+            district = st.text_input(
+                "District",
+                patient.district or "",
+                key=f"edit_district_{patient.id}",
+            )
+
+            state = st.text_input(
+                "State",
+                patient.state or "",
+                key=f"edit_state_{patient.id}",
+            )
+
+            weight = st.number_input(
+                "Weight (kg)",
+                min_value=0,
+                max_value=300,
+                value=patient.weight_kg or 0,
+                key=f"edit_weight_{patient.id}",
+            )
+
+        st.divider()
+
+        st.markdown("**Medical History**")
+
+        existing_conditions = (
+            [c.strip() for c in patient.chronic_conditions.split(",") if c.strip()]
+            if patient.chronic_conditions else []
         )
 
-        st.text_input(
-            "Name",
-            patient.full_name,
-            disabled=True,
+        chronic_conditions = st.multiselect(
+            "Known Chronic Conditions",
+            CHRONIC_CONDITIONS,
+            default=[c for c in existing_conditions if c in CHRONIC_CONDITIONS],
+            key=f"edit_chronic_conditions_{patient.id}",
         )
 
-        st.text_input(
-            "Gender",
-            patient.gender,
-            disabled=True,
+        remarks = st.text_area(
+            "Other Medical History / Remarks",
+            patient.remarks or "",
+            height=120,
+            key=f"edit_remarks_{patient.id}",
         )
 
-        st.text_input(
-            "Blood Group",
-            patient.blood_group,
-            disabled=True,
+        save = st.form_submit_button(
+            "💾 Save Changes",
+            type="primary",
         )
 
-        st.text_input(
-            "Mobile",
-            patient.mobile_number,
-            disabled=True,
-        )
+    if save:
 
-    with c2:
+        if not full_name.strip():
 
-        st.text_input(
-            "Age",
-            patient.age,
-            disabled=True,
-        )
+            st.error("Patient name is required.")
 
-        st.text_input(
-            "Village",
-            patient.village,
-            disabled=True,
-        )
+        else:
 
-        st.text_input(
-            "District",
-            patient.district,
-            disabled=True,
-        )
+            try:
 
-        st.text_input(
-            "State",
-            patient.state,
-            disabled=True,
-        )
+                PatientService.update_patient(
 
-        st.text_input(
-            "Weight (kg)",
-            patient.weight_kg,
-            disabled=True,
-        )
+                    patient.id,
 
-    st.text_area(
-        "Remarks",
-        patient.remarks,
-        height=120,
-        disabled=True,
-    )
+                    full_name=full_name.strip(),
+
+                    age=int(age),
+
+                    gender=gender,
+
+                    blood_group=blood_group if blood_group else None,
+
+                    mobile_number=mobile.strip(),
+
+                    village=village.strip(),
+
+                    district=district.strip(),
+
+                    state=state.strip(),
+
+                    weight_kg=int(weight),
+
+                    remarks=remarks.strip(),
+
+                    chronic_conditions=", ".join(chronic_conditions) if chronic_conditions else None,
+
+                )
+
+                st.success("✅ Patient details updated successfully.")
+
+                st.rerun()
+
+            except Exception as ex:
+
+                st.exception(ex)
