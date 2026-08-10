@@ -790,7 +790,37 @@ def show_consultation():
 
         st.subheader("🤖 AI Clinical Summary")
 
-        st.info(ai_summary)
+        st.caption(
+            "AI-generated assistive summary - not a replacement for a "
+            "qualified doctor."
+        )
+
+        sections = llm_service.parse_sections(ai_summary)
+
+        if sections:
+
+            section_icons = {
+                "Clinical Summary": "📝",
+                "Possible Reasoning": "🧭",
+                "Immediate Advice": "⚡",
+                "Home Care": "🏠",
+                "Red Flag Symptoms": "🚩",
+                "Referral Recommendation": "🏥",
+            }
+
+            for section in sections:
+
+                icon = section_icons.get(section["title"], "")
+
+                with st.container(border=True):
+
+                    st.markdown(f"##### {icon} {section['title']}")
+                    st.write(section["body"])
+
+        else:
+            # Parsing failed (e.g. an error/unavailable message rather
+            # than a structured report) - fall back to raw display.
+            st.info(ai_summary)
 
         st.write("")
 

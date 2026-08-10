@@ -181,6 +181,71 @@ class LLMService:
 
         return "\n".join(lines)
 
+    @classmethod
+    def parse_sections(cls, report: str) -> list[dict]:
+        """
+        Split a cleaned-up report (after _isolate_final_report /
+        _renumber_sections) into its six canonical sections, so the UI
+        can render each with its own heading instead of dumping the
+        whole thing into one paragraph block.
+
+        Returns a list of {"number": int, "title": str, "body": str}
+        in order. Returns [] if the expected headings aren't found
+        (e.g. an error message string), so callers can fall back to
+        showing the raw text.
+
+        Matches on the leading "N. " number alone (like the PDF
+        generator's parser) rather than requiring the heading text to
+        match a canonical label exactly - small local models sometimes
+        drift on wording (e.g. "6. Recommendation" instead of "6.
+        Referral Recommendation"), and requiring an exact match would
+        silently reject the whole report over one mismatched word.
+        The canonical label for each position is used as the title
+        regardless of what the model actually wrote.
+        """
+
+        heading_re = re.compile(r"^(\d+)\.\s*\**\s*(.+?)\s*\**:?\s*$")
+
+        sections: list[dict] = []
+        current_body: list[str] = []
+
+        for line in report.split("\n"):
+            stripped = line.strip()
+            match = heading_re.match(stripped)
+
+            if match and len(match.group(2)) >= 40:
+                match = None
+
+            if match:
+                if sections:
+                    sections[-1]["body"] = "\n".join(current_body).strip()
+                    current_body = []
+
+                number = int(match.group(1))
+                title = (
+                    cls._SECTION_LABELS[number - 1]
+                    if 1 <= number <= len(cls._SECTION_LABELS)
+                    else match.group(2).strip()
+                )
+
+                sections.append({
+                    "number": number,
+                    "title": title,
+                    "body": "",
+                })
+            elif sections:
+                if stripped and set(stripped) <= {"*", "-", "_"}:
+                    continue
+                current_body.append(line)
+
+        if sections:
+            sections[-1]["body"] = "\n".join(current_body).strip()
+
+        if len(sections) < len(cls._SECTION_LABELS):
+            return []
+
+        return sections
+
     _META_COMMENTARY_MARKERS = (
         "i've", "i have", "let me know", "please let me know",
         "hope this helps", "note:", "as requested", "i adhered",
@@ -216,7 +281,15 @@ class LLMService:
     # -----------------------------------------------------
 
     _LANGUAGE_INSTRUCTIONS = {
-        "English": "Write the entire report in English.",
+        "English": (
+            "Write the entire report in plain, simple English that a "
+            "frontline rural health worker with basic medical training "
+            "can read easily. Use short, direct sentences and everyday "
+            "words. Do NOT invent or use obscure/pseudo-scientific "
+            "terminology - every medical term you use must be a real, "
+            "standard term, and if a simpler everyday word says the "
+            "same thing, prefer it."
+        ),
         "Hindi": (
             "CRITICAL LANGUAGE INSTRUCTION: Write your entire response in "
             "Hindi, using Devanagari script throughout (including the "
@@ -268,7 +341,12 @@ class LLMService:
 
 You are an experienced rural healthcare physician assisting a frontline
 healthcare worker. Use ONLY the reference information provided below;
-do not invent clinical facts beyond it.
+do not invent clinical facts, mechanisms, or terminology beyond it.
+In particular, for "Possible Reasoning", explain in plain words why the
+reported symptoms fit the predicted disease using only the symptoms and
+description already given above - do not introduce new medical
+mechanisms, made-up terms, or unrelated body parts/systems that were
+not mentioned in the reported symptoms or reference knowledge.
 
 Patient
 Name: {patient.full_name}
@@ -301,7 +379,11 @@ Generate a report using exactly these headings:
 6. Referral Recommendation
 
 Keep the response under 200 words in total.
-Do not prescribe medicines.
+Do not prescribe medicines. Do not name any specific drug, cream,
+tablet, brand, or chemical/active ingredient - not even as an example.
+If a treatment category is relevant, describe it only in general
+terms (e.g. "an antifungal cream if advised by a doctor"), and never
+invent a product or ingredient name that was not given to you above.
 Mention that this is an AI-generated assistive summary and not a
 replacement for a qualified doctor.
 Output ONLY the six numbered sections above, in a professional
@@ -312,6 +394,10 @@ Write each heading exactly ONCE, followed immediately by its content -
 do not list the six headings as a bare outline before writing them
 again with content, and do not restart or continue the numbering a
 second time.
+Put a blank line between each heading and its content, and a blank
+line after each section's content before the next heading, so the six
+sections are clearly separated rather than run together as one
+paragraph. Keep each section to 1-3 short sentences.
 
 Reminder - {language_instruction}
 """
